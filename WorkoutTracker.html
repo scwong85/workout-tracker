@@ -7,6 +7,36 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Workout Tracker</title>
+    <link rel="manifest" id="pwa-manifest">
+    <script>
+    const manifestData = {
+        name: "Workout Tracker",
+        short_name: "Workout",
+        description: "Track your workouts with rest intervals",
+        start_url: "./",
+        display: "standalone",
+        orientation: "portrait",
+        theme_color: "#0077FF",
+        background_color: "#0A1929",
+        icons: [
+        {
+            src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='24' fill='%230077FF'/%3E%3Ctext x='96' y='130' font-size='120' text-anchor='middle'%3E%F0%9F%92%AA%3C/text%3E%3C/svg%3E",
+            sizes: "192x192",
+            type: "image/svg+xml",
+            purpose: "any maskable"
+        },
+        {
+            src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='64' fill='%230077FF'/%3E%3Ctext x='256' y='340' font-size='320' text-anchor='middle'%3E%F0%9F%92%AA%3C/text%3E%3C/svg%3E",
+            sizes: "512x512",
+            type: "image/svg+xml",
+            purpose: "any maskable"
+        }
+        ]
+    };
+    const blob = new Blob([JSON.stringify(manifestData)], {type: 'application/json'});
+    document.getElementById('pwa-manifest').href = URL.createObjectURL(blob);
+    </script>
+
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         * {
@@ -1348,17 +1378,12 @@
         async function showAddExerciseSetModal() {
             const exercises = await app.db.getAll('exercises');
             
-            const html = `
+            document.getElementById('exerciseSetForm').innerHTML = `
                 <div class="form-group">
-                    <label class="form-label">Select Exercises for this Set</label>
-                    <div id="exerciseCheckboxList" style="max-height: 200px; overflow-y: auto;">
-                        ${exercises.map(ex => `
-                            <label style="display: block; padding: 8px; cursor: pointer;">
-                                <input type="checkbox" value="${ex.id}" data-name="${ex.name}" data-type="${ex.type}">
-                                ${ex.name} (${ex.type === 1 ? 'Reps' : 'Duration'})
-                            </label>
-                        `).join('')}
+                    <div class="search-box" style="margin-bottom:12px;">
+                        <input type="text" class="search-input" id="addSetSearch" placeholder="Search exercises..." oninput="filterExerciseCheckboxList('addSetSearch','exerciseCheckboxGroups')">
                     </div>
+                    <div id="exerciseCheckboxGroups" style="max-height:260px;overflow-y:auto;"></div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Sets</label>
@@ -1368,7 +1393,7 @@
                     <label class="form-label">Reps per Set</label>
                     <input type="number" class="form-input" id="setReps" value="10" min="1">
                 </div>
-                <div class="form-group" id="durationGroup" style="display: none;">
+                <div class="form-group" id="durationGroup" style="display:none;">
                     <label class="form-label">Duration per Set (seconds)</label>
                     <input type="number" class="form-input" id="setDuration" value="30" min="1">
                 </div>
@@ -1382,13 +1407,14 @@
                 </div>
                 <button type="button" class="btn btn-success" onclick="addExerciseSetToPlan()">Add to Plan</button>
             `;
-            
-            document.getElementById('exerciseSetForm').innerHTML = html;
+
+            renderExerciseCheckboxGroups(exercises, 'exerciseCheckboxGroups');
             document.getElementById('addExerciseSetModal').classList.add('active');
         }
 
+
         function addExerciseSetToPlan() {
-            const checkboxes = document.querySelectorAll('#exerciseCheckboxList input[type="checkbox"]:checked');
+            const checkboxes = document.querySelectorAll('#exerciseCheckboxGroups input[type="checkbox"]:checked');
             if (checkboxes.length === 0) {
                 alert('Please select at least one exercise');
                 return;
@@ -1906,23 +1932,18 @@
         async function showInjectExerciseModal() {
             const exercises = await app.db.getAll('exercises');
             
-            const html = `
+            document.getElementById('injectExerciseForm').innerHTML = `
                 <div class="form-group">
-                    <label class="form-label">Select Exercises</label>
-                    <div id="injectCheckboxList" style="max-height: 200px; overflow-y: auto;">
-                        ${exercises.map(ex => `
-                            <label style="display: block; padding: 8px; cursor: pointer;">
-                                <input type="checkbox" value="${ex.id}" data-name="${ex.name}" data-type="${ex.type}">
-                                ${ex.name} (${ex.type === 1 ? 'Reps' : 'Duration'})
-                            </label>
-                        `).join('')}
+                    <div class="search-box" style="margin-bottom:12px;">
+                        <input type="text" class="search-input" id="injectSearch" placeholder="Search exercises..." oninput="filterExerciseCheckboxList('injectSearch','injectCheckboxGroups')">
                     </div>
+                    <div id="injectCheckboxGroups" style="max-height:260px;overflow-y:auto;"></div>
                 </div>
                 <div class="form-group" id="injectRepsGroup">
                     <label class="form-label">Reps</label>
                     <input type="number" class="form-input" id="injectReps" value="10" min="1">
                 </div>
-                <div class="form-group" id="injectDurationGroup" style="display: none;">
+                <div class="form-group" id="injectDurationGroup" style="display:none;">
                     <label class="form-label">Duration (seconds)</label>
                     <input type="number" class="form-input" id="injectDuration" value="30" min="1">
                 </div>
@@ -1936,13 +1957,14 @@
                 </div>
                 <button type="button" class="btn btn-success" onclick="injectExercise()">Add Exercise</button>
             `;
-            
-            document.getElementById('injectExerciseForm').innerHTML = html;
+
+            renderExerciseCheckboxGroups(exercises, 'injectCheckboxGroups');
             document.getElementById('injectExerciseModal').classList.add('active');
         }
 
+
         function injectExercise() {
-            const checkboxes = document.querySelectorAll('#injectCheckboxList input[type="checkbox"]:checked');
+            const checkboxes = document.querySelectorAll('#injectCheckboxGroups input[type="checkbox"]:checked');
             if (checkboxes.length === 0) {
                 alert('Please select at least one exercise');
                 return;
@@ -1975,6 +1997,83 @@
             
             renderWorkoutCard();
         }
+
+        function renderExerciseCheckboxGroups(exercises, containerId, searchTerm = '') {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+
+            const filtered = searchTerm
+                ? exercises.filter(e => e.name.toLowerCase().includes(searchTerm.toLowerCase()))
+                : exercises;
+
+            const grouped = filtered.reduce((acc, ex) => {
+                if (!acc[ex.category]) acc[ex.category] = [];
+                acc[ex.category].push(ex);
+                return acc;
+            }, {});
+
+            if (Object.keys(grouped).length === 0) {
+                container.innerHTML = '<p style="color:var(--text-secondary);padding:10px;">No exercises found</p>';
+                return;
+            }
+
+            container.innerHTML = Object.entries(grouped).map(([category, exs]) => `
+                <div style="margin-bottom:12px;">
+                    <div style="
+                        padding: 6px 10px;
+                        background: var(--bg-card);
+                        border-radius: 8px;
+                        font-size: 13px;
+                        font-weight: 600;
+                        color: var(--secondary);
+                        text-transform: capitalize;
+                        margin-bottom: 6px;
+                        letter-spacing: 0.5px;
+                    ">
+                        ${getCategoryEmoji(category)} ${category}
+                    </div>
+                    ${exs.map(ex => `
+                        <label style="
+                            display: flex;
+                            align-items: center;
+                            gap: 10px;
+                            padding: 10px 12px;
+                            background: var(--bg-dark);
+                            border-radius: 8px;
+                            margin-bottom: 4px;
+                            cursor: pointer;
+                            font-size: 14px;
+                        ">
+                            <input type="checkbox" value="${ex.id}" data-name="${ex.name}" data-type="${ex.type}" style="width:16px;height:16px;accent-color:var(--primary);">
+                            <span style="flex:1;">${ex.name}</span>
+                            <span style="
+                                font-size:11px;
+                                padding:2px 8px;
+                                border-radius:10px;
+                                background: ${ex.type === 1 ? 'rgba(0,212,170,0.15)' : 'rgba(108,92,231,0.15)'};
+                                color: ${ex.type === 1 ? 'var(--secondary)' : 'var(--accent)'};
+                            ">${ex.type === 1 ? 'Reps' : 'Duration'}</span>
+                        </label>
+                    `).join('')}
+                </div>
+            `).join('');
+        }
+
+        function filterExerciseCheckboxList(searchInputId, containerId) {
+            const term = document.getElementById(searchInputId).value;
+            app.db.getAll('exercises').then(exercises => {
+                renderExerciseCheckboxGroups(exercises, containerId, term);
+            });
+        }
+
+        function getCategoryEmoji(category) {
+            const map = {
+                chest: '🫁', back: '🔙', legs: '🦵', core: '🎯',
+                arms: '💪', shoulders: '🏔️', 'full-body': '⚡'
+            };
+            return map[category] || '🏋️';
+        }
+
 
         async function loadStatistics(range = '7') {
             const sessions = await app.db.getAll('workoutSessions');
