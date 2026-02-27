@@ -1,0 +1,1890 @@
+
+class DBManager {
+    constructor() {
+        this.dbName = 'WorkoutTrackerDB';
+        this.version = 1;
+        this.db = null;
+    }
+
+    async init() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(this.dbName, this.version);
+            request.onerror = () => reject(request.error);
+            request.onsuccess = () => {
+                this.db = request.result;
+                resolve(this.db);
+            };
+            request.onupgradeneeded = (event) => {
+                const db = event.target.result;
+                if (!db.objectStoreNames.contains('exercises')) {
+                    const exerciseStore = db.createObjectStore('exercises', { keyPath: 'id' });
+                    exerciseStore.createIndex('name', 'name', { unique: false });
+                    exerciseStore.createIndex('category', 'category', { unique: false });
+                }
+                if (!db.objectStoreNames.contains('workoutPlans')) {
+                    db.createObjectStore('workoutPlans', { keyPath: 'id' });
+                }
+                if (!db.objectStoreNames.contains('workoutSessions')) {
+                    const sessionStore = db.createObjectStore('workoutSessions', { keyPath: 'id' });
+                    sessionStore.createIndex('startTime', 'startTime', { unique: false });
+                }
+                if (!db.objectStoreNames.contains('settings')) {
+                    db.createObjectStore('settings', { keyPath: 'key' });
+                }
+            };
+        });
+    }
+
+    async add(storeName, data) {
+        const tx = this.db.transaction(storeName, 'readwrite');
+        return tx.objectStore(storeName).add(data);
+    }
+
+    async put(storeName, data) {
+        const tx = this.db.transaction(storeName, 'readwrite');
+        return tx.objectStore(storeName).put(data);
+    }
+
+    async get(storeName, key) {
+        const tx = this.db.transaction(storeName, 'readonly');
+        return new Promise((resolve, reject) => {
+            const request = tx.objectStore(storeName).get(key);
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async getAll(storeName) {
+        const tx = this.db.transaction(storeName, 'readonly');
+        return new Promise((resolve, reject) => {
+            const request = tx.objectStore(storeName).getAll();
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async delete(storeName, key) {
+        const tx = this.db.transaction(storeName, 'readwrite');
+        return tx.objectStore(storeName).delete(key);
+    }
+
+    async clear(storeName) {
+        const tx = this.db.transaction(storeName, 'readwrite');
+        return tx.objectStore(storeName).clear();
+    }
+}
+
+const PRESET_EXERCISES = [
+    { name: 'Standard Push-ups', type: 1, category: 'chest' },
+    { name: 'Wide Push-ups', type: 1, category: 'chest' },
+    { name: 'Diamond Push-ups', type: 1, category: 'chest' },
+    { name: 'Decline Push-ups', type: 1, category: 'chest' },
+    { name: 'Pike Push-ups', type: 1, category: 'shoulders' },
+    { name: 'Pseudo Planche Push-ups', type: 1, category: 'chest' },
+    { name: 'Archer Push-ups', type: 1, category: 'chest' },
+    { name: 'One-Arm Push-ups (Assisted)', type: 1, category: 'chest' },
+    { name: 'Clapping Push-ups', type: 1, category: 'chest' },
+    { name: 'Hindu Push-ups', type: 1, category: 'full-body' },
+    { name: 'Handstand Push-ups (Wall)', type: 1, category: 'shoulders' },
+    { name: 'Dips (Parallel Bars)', type: 1, category: 'chest' },
+    { name: 'Bench Dips', type: 1, category: 'arms' },
+    { name: 'Korean Dips', type: 1, category: 'arms' },
+    { name: 'Pull-ups (Overhand)', type: 1, category: 'back' },
+    { name: 'Chin-ups (Underhand)', type: 1, category: 'back' },
+    { name: 'Wide Grip Pull-ups', type: 1, category: 'back' },
+    { name: 'Close Grip Pull-ups', type: 1, category: 'back' },
+    { name: 'Neutral Grip Pull-ups', type: 1, category: 'back' },
+    { name: 'Archer Pull-ups', type: 1, category: 'back' },
+    { name: 'Typewriter Pull-ups', type: 1, category: 'back' },
+    { name: 'Australian Pull-ups (Inverted Rows)', type: 1, category: 'back' },
+    { name: 'One-Arm Pull-ups (Assisted)', type: 1, category: 'back' },
+    { name: 'Muscle-ups', type: 1, category: 'full-body' },
+    { name: 'Commando Pull-ups', type: 1, category: 'back' },
+    { name: 'Plank (Front)', type: 2, category: 'core' },
+    { name: 'Side Plank (Left)', type: 2, category: 'core' },
+    { name: 'Side Plank (Right)', type: 2, category: 'core' },
+    { name: 'Hollow Body Hold', type: 2, category: 'core' },
+    { name: 'Crunches', type: 1, category: 'core' },
+    { name: 'Bicycle Crunches', type: 1, category: 'core' },
+    { name: 'Russian Twists', type: 1, category: 'core' },
+    { name: 'Leg Raises (Lying)', type: 1, category: 'core' },
+    { name: 'Hanging Leg Raises', type: 1, category: 'core' },
+    { name: 'Hanging Knee Raises', type: 1, category: 'core' },
+    { name: 'Dragon Flags', type: 1, category: 'core' },
+    { name: 'L-Sit Hold', type: 2, category: 'core' },
+    { name: 'V-Sit Hold', type: 2, category: 'core' },
+    { name: 'Ab Wheel Rollouts', type: 1, category: 'core' },
+    { name: 'Mountain Climbers', type: 1, category: 'full-body' },
+    { name: 'Bodyweight Squats', type: 1, category: 'legs' },
+    { name: 'Jump Squats', type: 1, category: 'legs' },
+    { name: 'Pistol Squats', type: 1, category: 'legs' },
+    { name: 'Bulgarian Split Squats', type: 1, category: 'legs' },
+    { name: 'Lunges (Forward)', type: 1, category: 'legs' },
+    { name: 'Reverse Lunges', type: 1, category: 'legs' },
+    { name: 'Side Lunges', type: 1, category: 'legs' },
+    { name: 'Calf Raises', type: 1, category: 'legs' },
+    { name: 'Single-Leg Calf Raises', type: 1, category: 'legs' },
+    { name: 'Glute Bridges', type: 1, category: 'legs' },
+    { name: 'Single-Leg Glute Bridges', type: 1, category: 'legs' },
+    { name: 'Nordic Curls', type: 1, category: 'legs' },
+    { name: 'Box Jumps', type: 1, category: 'legs' },
+    { name: 'Broad Jumps', type: 1, category: 'legs' },
+    { name: 'Burpees', type: 1, category: 'full-body' },
+    { name: 'Jump Rope', type: 2, category: 'full-body' },
+    { name: 'High Knees', type: 2, category: 'full-body' },
+    { name: 'Butt Kicks', type: 2, category: 'full-body' },
+    { name: 'Bear Crawls', type: 2, category: 'full-body' },
+    { name: 'Crab Walks', type: 2, category: 'full-body' }
+];
+
+function generateId() {
+    return Date.now().toString(36) + Math.random().toString(36).substr(2);
+}
+
+function vibrate(pattern = 50) {
+    if ('vibrate' in navigator) {
+        navigator.vibrate(pattern);
+    }
+}
+
+function showToast(message) {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.classList.add('active');
+    setTimeout(() => toast.classList.remove('active'), 3000);
+}
+
+function closeModal(modalId) {
+    document.getElementById(modalId).classList.remove('active');
+}
+
+function formatTime(seconds) {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+function formatDate(timestamp) {
+    return new Date(timestamp).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+const app = {
+    db: new DBManager(),
+    currentPage: 'home',
+    currentWorkout: null,
+    isResting: false,
+    restTimer: null,
+    restTimeRemaining: 0,
+    editingPlanId: null,
+    editingExerciseId: null,
+    currentPlanExercises: [],
+    chartInstances: {},
+    selectedExercises: {}
+};
+
+async function initApp() {
+    await app.db.init();
+    await initPresetExercises();
+    setupEventListeners();
+    setupBackButtonNavigation();
+    await loadPage('home');
+    
+    if ('Notification' in window && Notification.permission === 'default') {
+        await Notification.requestPermission();
+    }
+}
+
+async function initPresetExercises() {
+    const exercises = await app.db.getAll('exercises');
+    if (exercises.length === 0) {
+        for (const preset of PRESET_EXERCISES) {
+            await app.db.add('exercises', {
+                id: generateId(),
+                ...preset,
+                isPreset: true,
+                createdAt: Date.now()
+            });
+        }
+    }
+}
+
+function setupBackButtonNavigation() {
+    // Make initial state “home” without adding extra history entry
+    window.history.replaceState({ type:'page', page:'home' }, '', '#home');
+
+    window.addEventListener('popstate', async (e) => {
+        // 1) If any modal (“card”) is open, close it and stop.
+        if (app.modalStack && app.modalStack.length > 0) {
+            const top = app.modalStack[app.modalStack.length - 1];
+            closeModal(top, { fromPopstate: true });
+            return;
+        }
+
+        // 2) If workout is ongoing and user hits back while on workout page => go Home (keep workout active)
+        if (app.currentPage === 'active-workout' && app.currentWorkout && app.currentWorkout.isOngoing) {
+            await loadPage('home');
+            window.history.replaceState({ type:'page', page:'home' }, '', '#home');
+            return;
+        }
+
+        // 3) Otherwise follow history state (or default to home)
+        const page = (e.state && e.state.type === 'page' && e.state.page) ? e.state.page : 'home';
+        await loadPage(page);
+    });
+}
+
+function setupEventListeners() {
+    document.getElementById('hamburgerBtn').addEventListener('click', toggleSidebar);
+    document.getElementById('overlay').addEventListener('click', closeSidebar);
+
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+            const page = e.target.getAttribute('data-page');
+            loadPage(page);
+            closeSidebar();
+            if (page !== 'active-workout') {
+                window.history.pushState({page: page}, '', '#' + page);
+            }
+        });
+    });
+
+    document.getElementById('startNewWorkoutBtn').addEventListener('click', () => {
+        if (!confirmTerminateIfActive()) return;
+        if (app.currentWorkout && app.currentWorkout.isOngoing) terminateCurrentWorkout();
+
+        document.getElementById('selectPlanModal').classList.add('active');
+        loadWorkoutPlanSelector();
+    });
+
+
+    document.getElementById('createExerciseBtn').addEventListener('click', () => {
+        app.editingExerciseId = null;
+        document.getElementById('exerciseModalTitle').textContent = 'Create Exercise';
+        document.getElementById('exerciseForm').reset();
+        document.getElementById('exerciseModal').classList.add('active');
+    });
+
+    document.getElementById('exerciseForm').addEventListener('submit', handleExerciseSubmit);
+    document.getElementById('exerciseSearch').addEventListener('input', (e) => {
+        loadExercises(e.target.value);
+    });
+
+    document.getElementById('createPlanBtn').addEventListener('click', () => {
+        app.editingPlanId = null;
+        app.currentPlanExercises = [];
+        document.getElementById('planModalTitle').textContent = 'Create Workout Plan';
+        document.getElementById('planForm').reset();
+        document.getElementById('planExercisesList').innerHTML = '';
+        document.getElementById('planModal').classList.add('active');
+    });
+
+    document.getElementById('planForm').addEventListener('submit', handlePlanSubmit);
+    document.getElementById('addExerciseToPlanbtn').addEventListener('click', showAddExerciseSetModal);
+
+    document.getElementById('exportDataBtn').addEventListener('click', exportData);
+    document.getElementById('importDataBtn').addEventListener('click', () => {
+        document.getElementById('importFileInput').click();
+    });
+    document.getElementById('importFileInput').addEventListener('change', importData);
+    document.getElementById('deleteAllDataBtn').addEventListener('click', deleteAllData);
+
+    document.querySelectorAll('.date-filter-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            document.querySelectorAll('.date-filter-btn').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            loadStatistics(e.target.dataset.range);
+        });
+    });
+}
+
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    const overlay = document.getElementById('overlay');
+    const hamburger = document.getElementById('hamburgerBtn');
+    
+    sidebar.classList.toggle('active');
+    overlay.classList.toggle('active');
+    hamburger.classList.toggle('active');
+}
+
+function closeSidebar() {
+    document.getElementById('sidebar').classList.remove('active');
+    document.getElementById('overlay').classList.remove('active');
+    document.getElementById('hamburgerBtn').classList.remove('active');
+}
+
+async function loadPage(pageName) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    
+    const pageElement = document.getElementById(`${pageName}-page`);
+    const navElement = document.querySelector(`[data-page="${pageName}"]`);
+    
+    if (pageElement) pageElement.classList.add('active');
+    if (navElement) navElement.classList.add('active');
+    
+    app.currentPage = pageName;
+    
+    switch(pageName) {
+        case 'home':
+            await loadHomePage();
+            break;
+        case 'workout-plans':
+            await loadWorkoutPlans();
+            break;
+        case 'exercises':
+            await loadExercises();
+            break;
+        case 'statistics':
+            await loadStatistics();
+            break;
+        case 'history':
+            await loadHistory();
+            break;
+    }
+}
+
+async function loadHomePage() {
+    const sessions = await app.db.getAll('workoutSessions');
+    const recent = sessions.sort((a, b) => b.startTime - a.startTime).slice(0, 5);
+
+    const activeHolderId = 'activeWorkoutHolder';
+    let activeHolder = document.getElementById(activeHolderId);
+    if (!activeHolder) {
+        // Create a holder above recent workouts list (once)
+        const homePage = document.getElementById('home-page');
+        activeHolder = document.createElement('div');
+        activeHolder.id = activeHolderId;
+        // Put it right after Quick Start card (approx)
+        homePage.insertBefore(activeHolder, homePage.querySelector('#recentWorkoutsList'));
+    }
+
+    if (app.currentWorkout && app.currentWorkout.isOngoing) {
+        const total = app.currentWorkout.sets.length;
+        const done = app.currentWorkout.completedSets.length;
+        activeHolder.innerHTML = `
+            <div class="card" style="border:1px solid rgba(0,119,255,0.35);">
+                <div class="card-header">
+                    <div>
+                        <div class="card-title">Active workout</div>
+                        <div class="card-subtitle">${app.currentWorkout.planName} • ${done} sets logged • ${total} queued</div>
+                    </div>
+                </div>
+                <button class="btn btn-primary" onclick="resumeActiveWorkout()">Resume</button>
+            </div>
+        `;
+    } else {
+        activeHolder.innerHTML = '';
+    }
+
+
+    const container = document.getElementById('recentWorkoutsList');
+    if (recent.length === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">💪</div><p>No workouts yet. Start your first workout!</p></div>';
+    } else {
+        container.innerHTML = recent.map(session => `
+            <div class="list-item">
+                <div class="list-item-content">
+                    <h3>${session.workoutPlanName}</h3>
+                    <p>${formatDate(session.startTime)} • ${session.completedSets.length} sets completed</p>
+                </div>
+            </div>
+        `).join('');
+    }
+}
+
+async function loadExercises(searchTerm = '') {
+    const exercises = await app.db.getAll('exercises');
+    const filtered = searchTerm 
+        ? exercises.filter(e => e.name.toLowerCase().includes(searchTerm.toLowerCase()))
+        : exercises;
+    
+    const container = document.getElementById('exercisesList');
+    
+    if (filtered.length === 0) {
+        container.innerHTML = '<div class="empty-state"><p>No exercises found</p></div>';
+        return;
+    }
+
+    const grouped = filtered.reduce((acc, ex) => {
+        if (!acc[ex.category]) acc[ex.category] = [];
+        acc[ex.category].push(ex);
+        return acc;
+    }, {});
+
+    container.innerHTML = Object.entries(grouped).map(([category, exs]) => `
+        <div style="margin-bottom: 30px;">
+            <h3 style="margin-bottom: 12px; text-transform: capitalize; color: var(--text-secondary);">${category}</h3>
+            ${exs.map(ex => `
+                <div class="list-item" style="cursor: pointer;" onclick="showExerciseStats('${ex.id}')">
+                    <div class="list-item-content">
+                        <h3>${ex.name}</h3>
+                        <div>
+                            <span class="exercise-badge type-${ex.type}">
+                                ${ex.type === 1 ? 'Reps' : 'Duration'}
+                            </span>
+                            ${ex.isPreset ? '<span class="exercise-badge">Preset</span>' : ''}
+                        </div>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `).join('');
+}
+
+async function handleExerciseSubmit(e) {
+    e.preventDefault();
+    
+    const exercise = {
+        name: document.getElementById('exerciseName').value,
+        type: parseInt(document.getElementById('exerciseType').value),
+        category: document.getElementById('exerciseCategory').value,
+        defaultWeight: parseFloat(document.getElementById('exerciseWeight').value) || 0,
+        isPreset: false,
+        createdAt: Date.now()
+    };
+
+    if (app.editingExerciseId) {
+        exercise.id = app.editingExerciseId;
+        await app.db.put('exercises', exercise);
+        showToast('Exercise updated!');
+    } else {
+        exercise.id = generateId();
+        await app.db.add('exercises', exercise);
+        showToast('Exercise created!');
+    }
+
+    closeModal('exerciseModal');
+    await loadExercises();
+    vibrate();
+}
+
+async function editExercise(id) {
+    const exercise = await app.db.get('exercises', id);
+    app.editingExerciseId = id;
+    
+    document.getElementById('exerciseModalTitle').textContent = 'Edit Exercise';
+    document.getElementById('exerciseName').value = exercise.name;
+    document.getElementById('exerciseType').value = exercise.type;
+    document.getElementById('exerciseCategory').value = exercise.category;
+    document.getElementById('exerciseWeight').value = exercise.defaultWeight || '';
+    document.getElementById('exerciseModal').classList.add('active');
+}
+
+async function deleteExercise(id) {
+    if (confirm('Delete this exercise?')) {
+        await app.db.delete('exercises', id);
+        await loadExercises();
+        showToast('Exercise deleted');
+        vibrate();
+    }
+}
+
+async function loadWorkoutPlans() {
+    const plans = await app.db.getAll('workoutPlans');
+    const container = document.getElementById('workoutPlansList');
+    
+    if (plans.length === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📋</div><p>No workout plans yet. Create one!</p></div>';
+        return;
+    }
+
+    container.innerHTML = plans.map(plan => `
+        <div class="card">
+            <div class="card-header">
+                <div>
+                    <div class="card-title">${plan.name}</div>
+                    <div class="card-subtitle">${plan.exercises.length} exercise sets</div>
+                </div>
+                <div class="card-actions">
+                    <button class="icon-btn" onclick="startWorkout('${plan.id}')">▶️</button>
+                    <button class="icon-btn" onclick="duplicatePlan('${plan.id}')">📋</button>
+                    <button class="icon-btn" onclick="editPlan('${plan.id}')">✏️</button>
+                    <button class="icon-btn" onclick="deletePlan('${plan.id}')">🗑️</button>
+                </div>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function handlePlanSubmit(e) {
+    e.preventDefault();
+    
+    const plan = {
+        name: document.getElementById('planName').value,
+        exercises: app.currentPlanExercises,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+    };
+
+    if (app.editingPlanId) {
+        plan.id = app.editingPlanId;
+        const existing = await app.db.get('workoutPlans', app.editingPlanId);
+        plan.createdAt = existing.createdAt;
+        await app.db.put('workoutPlans', plan);
+        showToast('Plan updated!');
+    } else {
+        plan.id = generateId();
+        await app.db.add('workoutPlans', plan);
+        showToast('Plan created!');
+    }
+
+    closeModal('planModal');
+    await loadWorkoutPlans();
+    vibrate();
+}
+
+async function editPlan(id) {
+    const plan = await app.db.get('workoutPlans', id);
+    app.editingPlanId = id;
+    app.currentPlanExercises = plan.exercises;
+    
+    document.getElementById('planModalTitle').textContent = 'Edit Workout Plan';
+    document.getElementById('planName').value = plan.name;
+    
+    renderPlanExercisesList();
+    document.getElementById('planModal').classList.add('active');
+}
+
+async function duplicatePlan(id) {
+    const plan = await app.db.get('workoutPlans', id);
+    const newPlan = {
+        ...plan,
+        id: generateId(),
+        name: plan.name + ' (Copy)',
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+    };
+    
+    await app.db.add('workoutPlans', newPlan);
+    await loadWorkoutPlans();
+    showToast('Plan duplicated!');
+    vibrate();
+}
+
+async function deletePlan(id) {
+    if (confirm('Delete this workout plan?')) {
+        await app.db.delete('workoutPlans', id);
+        await loadWorkoutPlans();
+        showToast('Plan deleted');
+        vibrate();
+    }
+}
+
+async function showAddExerciseSetModal() {
+    app.selectedExercises = {};
+    const exercises = await app.db.getAll('exercises');
+    
+    document.getElementById('exerciseSetForm').innerHTML = `
+        <div class="form-group">
+            <div class="search-box" style="margin-bottom:12px;">
+                <input type="text" class="search-input" id="addSetSearch" placeholder="Search exercises..." oninput="filterExerciseCheckboxList('addSetSearch','exerciseCheckboxGroups')">
+            </div>
+            <div id="exerciseCheckboxGroups" style="max-height:260px;overflow-y:auto;"></div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Sets</label>
+            <input type="number" class="form-input" id="setSets" value="3" min="1">
+        </div>
+        <div class="form-group" id="repsGroup">
+            <label class="form-label">Reps per Set</label>
+            <input type="number" class="form-input" id="setReps" value="10" min="1">
+        </div>
+        <div class="form-group" id="durationGroup" style="display:none;">
+            <label class="form-label">Duration per Set (seconds)</label>
+            <input type="number" class="form-input" id="setDuration" value="30" min="1">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Weight (kg, optional)</label>
+            <input type="number" class="form-input" id="setWeight" step="0.5">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Rest After Set (seconds)</label>
+            <input type="number" class="form-input" id="setRest" value="60" min="0">
+        </div>
+        <div id="selectedExercisesConfig" style="margin-bottom:12px;"></div>
+        <button type="button" class="btn btn-success" onclick="addExerciseSetToPlan()">Add to Plan</button>
+    `;
+
+    renderExerciseCheckboxGroups(exercises, 'exerciseCheckboxGroups');
+    document.getElementById('addExerciseSetModal').classList.add('active');
+}
+
+function addExerciseSetToPlan() {
+    const selected = Object.values(app.selectedExercises);
+    if (selected.length === 0) {
+        alert('Please select at least one exercise');
+        return;
+    }
+
+    const exercises = selected.map(ex => ({
+        exerciseId: ex.exerciseId,
+        exerciseName: ex.exerciseName,
+        type: ex.type,
+        sets: parseInt(document.getElementById('setSets').value),
+        reps: ex.reps || 0,
+        duration: ex.duration || 0,
+        weight: ex.weight || 0
+    }));
+
+    app.currentPlanExercises.push({
+        setIndex: app.currentPlanExercises.length,
+        exercises: exercises,
+        restAfterSet: parseInt(document.getElementById('setRest').value)
+    });
+
+    app.selectedExercises = {};
+    renderPlanExercisesList();
+    closeModal('addExerciseSetModal');
+    vibrate();
+}
+
+function renderPlanExercisesList() {
+    const container = document.getElementById('planExercisesList');
+    
+    if (app.currentPlanExercises.length === 0) {
+        container.innerHTML = '<p style="color: var(--text-secondary); padding: 10px;">No exercises added yet</p>';
+        return;
+    }
+
+    container.innerHTML = app.currentPlanExercises.map((set, idx) => `
+        <div class="card" style="margin-bottom: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: start;">
+                <div style="flex: 1;">
+                    <strong>Set ${idx + 1}</strong>
+                    ${set.exercises.map(ex => `
+                        <div style="margin-top: 4px; font-size: 14px;">
+                            • ${ex.exerciseName}: ${ex.sets} sets × ${ex.type === 1 ? ex.reps + ' reps' : ex.duration + 's'} 
+                            ${ex.weight ? `@ ${ex.weight}kg` : ''}
+                        </div>
+                    `).join('')}
+                    <div style="margin-top: 4px; font-size: 13px; color: var(--text-secondary);">
+                        Rest: ${set.restAfterSet}s
+                    </div>
+                </div>
+                <button class="icon-btn" onclick="removePlanExerciseSet(${idx})">🗑️</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function removePlanExerciseSet(index) {
+    app.currentPlanExercises.splice(index, 1);
+    app.currentPlanExercises.forEach((set, idx) => set.setIndex = idx);
+    renderPlanExercisesList();
+}
+
+async function loadWorkoutPlanSelector() {
+    const plans = await app.db.getAll('workoutPlans');
+    const container = document.getElementById('selectPlanList');
+    
+    if (plans.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">📋</div>
+                <p>No workout plans available.</p>
+                <button class="btn btn-primary" onclick="closeModal('selectPlanModal'); loadPage('workout-plans'); window.history.pushState({page: 'workout-plans'}, '', '#workout-plans');">
+                    Create New Plan
+                </button>
+                <button class="btn btn-secondary" onclick="startEmptyWorkout()">
+                    Start Empty Workout
+                </button>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="card" style="margin-bottom: 12px;">
+            <div class="card-title" style="margin-bottom: 10px;">New workout</div>
+            <button class="btn btn-primary" onclick="closeModal('selectPlanModal'); loadPage('workout-plans'); window.history.pushState({type:'page', page:'workout-plans'}, '', '#workout-plans');">
+                + Create New Plan
+            </button>
+            <button class="btn btn-secondary" onclick="startEmptyWorkout()">
+                Start Empty Workout
+            </button>
+        </div>
+
+        <div style="margin-bottom:10px;color:var(--text-secondary);font-weight:600;">Or start from a plan:</div>
+    ` + plans.map(plan => `
+        <div class="list-item" style="cursor: pointer;" onclick="startWorkout('${plan.id}')">
+            <div class="list-item-content">
+                <h3>${plan.name}</h3>
+                <p>${plan.exercises.length} exercise sets</p>
+            </div>
+        </div>
+    `).join('');
+
+}
+
+async function startEmptyWorkout() {
+    if (!confirmTerminateIfActive()) return;
+    if (app.currentWorkout && app.currentWorkout.isOngoing) terminateCurrentWorkout();
+
+
+    app.currentWorkout = {
+        planId: null,
+        planName: 'Custom Workout',
+        sets: [],
+        currentSetIndex: 0,
+        completedSets: [],
+        startTime: Date.now(),
+        isOngoing: true
+    };
+
+    closeModal('selectPlanModal');
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('active-workout-page').classList.add('active');
+    closeSidebar();
+    
+    showInjectExerciseModal();
+    
+    if ('wakeLock' in navigator) {
+        try {
+            await navigator.wakeLock.request('screen');
+        } catch (err) {}
+    }
+}
+
+async function startWorkout(planId) {
+    if (!confirmTerminateIfActive()) return;
+    if (app.currentWorkout && app.currentWorkout.isOngoing) terminateCurrentWorkout();
+
+
+    const plan = await app.db.get('workoutPlans', planId);
+    
+    const expandedSets = [];
+    for (const exerciseSet of plan.exercises) {
+        for (let i = 0; i < exerciseSet.exercises[0].sets; i++) {
+            expandedSets.push({
+                exercises: exerciseSet.exercises.map(ex => ({
+                    exerciseId: ex.exerciseId,
+                    exerciseName: ex.exerciseName,
+                    type: ex.type,
+                    reps: ex.reps,
+                    duration: ex.duration,
+                    weight: ex.weight
+                })),
+                restAfterSet: exerciseSet.restAfterSet,
+                originalSetIndex: exerciseSet.setIndex
+            });
+        }
+    }
+
+    app.currentWorkout = {
+        planId: plan.id,
+        planName: plan.name,
+        sets: expandedSets,
+        currentSetIndex: 0,
+        completedSets: [],
+        startTime: Date.now(),
+        isOngoing: true
+    };
+
+    closeModal('selectPlanModal');
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('active-workout-page').classList.add('active');
+    closeSidebar();
+    
+    renderWorkoutCard();
+    
+    if ('wakeLock' in navigator) {
+        try {
+            await navigator.wakeLock.request('screen');
+        } catch (err) {}
+    }
+}
+
+async function resumeActiveWorkout() {
+    if (!app.currentWorkout || !app.currentWorkout.isOngoing) return;
+
+    // show workout page
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('active-workout-page').classList.add('active');
+    app.currentPage = 'active-workout';
+
+    // ensure back from workout returns home
+    window.history.pushState({ type:'page', page:'home' }, '', '#home');
+    window.history.pushState({ type:'page', page:'active-workout' }, '', '#active-workout');
+
+    renderWorkoutCard();
+}
+
+function terminateCurrentWorkout() {
+    if (app.restTimer) clearInterval(app.restTimer);
+    app.restTimer = null;
+    app.isResting = false;
+    app.restTimeRemaining = 0;
+
+    app.currentWorkout = null;
+    showToast('Active workout terminated');
+}
+
+function confirmTerminateIfActive() {
+    if (app.currentWorkout && app.currentWorkout.isOngoing) {
+        return confirm('A workout is currently active. Terminate it and start a new one?');
+    }
+    return true;
+}
+
+function renderWorkoutCard() {
+    const container = document.getElementById('workoutContainer');
+    const workout = app.currentWorkout;
+    
+    if (app.isResting) {
+        renderRestCard(container);
+        return;
+    }
+
+    if (workout.currentSetIndex >= workout.sets.length) {
+        renderCongratsCard(container);
+        return;
+    }
+
+    const currentSet = workout.sets[workout.currentSetIndex];
+    const setNumber = workout.currentSetIndex + 1;
+    const totalSets = workout.sets.length;
+
+    container.innerHTML = `
+        <div class="workout-card" id="workoutCard">
+            <div class="workout-card-header">
+                <div class="workout-card-subtitle">Set ${setNumber} of ${totalSets}</div>
+                <div class="workout-card-title">
+                    ${currentSet.exercises.map(ex => ex.exerciseName).join(' + ')}
+                </div>
+            </div>
+            <div class="workout-card-body">
+                ${currentSet.exercises.map((ex, idx) => `
+                    <div style="margin-bottom: 20px;">
+                        <div style="color: var(--text-secondary); font-size: 14px; margin-bottom: 8px;">
+                            ${ex.exerciseName}
+                        </div>
+                        <div class="workout-value" id="workoutValue${idx}">
+                            ${ex.type === 1 ? ex.reps : formatTime(ex.duration)}
+                        </div>
+                        <div style="color: var(--text-secondary);">
+                            ${ex.type === 1 ? 'reps' : 'seconds'} ${ex.weight ? `• ${ex.weight}kg` : ''}
+                        </div>
+                        <div class="workout-controls">
+                            <button class="control-btn" onclick="adjustValue(${idx}, -1)">−</button>
+                            <button class="control-btn" onclick="adjustValue(${idx}, 1)">+</button>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+            <div class="swipe-hint">
+                ← Swipe left to skip | Swipe right to complete →<br>
+                Swipe up to add exercise ↑
+            </div>
+        </div>
+    `;
+
+    setupSwipeGestures();
+}
+
+function adjustValue(exerciseIndex, delta) {
+    const currentSet = app.currentWorkout.sets[app.currentWorkout.currentSetIndex];
+    const exercise = currentSet.exercises[exerciseIndex];
+    
+    if (exercise.type === 1) {
+        exercise.reps = Math.max(1, exercise.reps + delta);
+        document.getElementById(`workoutValue${exerciseIndex}`).textContent = exercise.reps;
+    } else {
+        exercise.duration = Math.max(1, exercise.duration + delta);
+        document.getElementById(`workoutValue${exerciseIndex}`).textContent = formatTime(exercise.duration);
+    }
+    vibrate(30);
+}
+
+function setupSwipeGestures() {
+    const card = document.getElementById('workoutCard');
+    let startX, startY, currentX, currentY;
+    let isDragging = false;
+
+    card.addEventListener('touchstart', (e) => {
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        isDragging = true;
+        card.classList.add('swiping');
+    });
+
+    card.addEventListener('touchmove', (e) => {
+        if (!isDragging) return;
+        
+        currentX = e.touches[0].clientX;
+        currentY = e.touches[0].clientY;
+        
+        const deltaX = currentX - startX;
+        const deltaY = currentY - startY;
+        
+        card.style.transform = `translate(calc(-50% + ${deltaX}px), calc(-50% + ${deltaY}px)) rotate(${deltaX * 0.05}deg)`;
+        card.style.opacity = 1 - Math.abs(deltaX) / 500;
+    });
+
+    card.addEventListener('touchend', (e) => {
+        if (!isDragging) return;
+        isDragging = false;
+        card.classList.remove('swiping');
+        
+        const deltaX = currentX - startX;
+        const deltaY = currentY - startY;
+        const threshold = window.innerWidth * 0.3;
+        
+        if (deltaX > threshold) {
+            completeSet();
+        } else if (deltaX < -threshold) {
+            skipSet();
+        } else if (deltaY < -100) {
+            showInjectExerciseModal();
+        } else {
+            card.style.transform = 'translate(-50%, -50%)';
+            card.style.opacity = '1';
+        }
+    });
+}
+
+function completeSet() {
+    vibrate([50, 50, 50]);
+    const currentSet = app.currentWorkout.sets[app.currentWorkout.currentSetIndex];
+    
+    currentSet.exercises.forEach(ex => {
+        app.currentWorkout.completedSets.push({
+            exerciseId: ex.exerciseId,
+            exerciseName: ex.exerciseName,
+            type: ex.type,
+            reps: ex.reps,
+            duration: ex.duration,
+            weight: ex.weight,
+            completedAt: Date.now()
+        });
+    });
+
+    app.currentWorkout.currentSetIndex++;
+    
+    if (app.currentWorkout.currentSetIndex < app.currentWorkout.sets.length) {
+        startRest(currentSet.restAfterSet);
+    } else {
+        renderWorkoutCard();
+    }
+}
+
+function skipSet() {
+    vibrate(100);
+    app.currentWorkout.currentSetIndex++;
+    renderWorkoutCard();
+}
+
+function startRest(duration) {
+    app.isResting = true;
+    app.restTimeRemaining = duration;
+    renderRestCard(document.getElementById('workoutContainer'));
+    
+    app.restTimer = setInterval(() => {
+        app.restTimeRemaining--;
+        updateRestDisplay();
+        
+        if (app.restTimeRemaining <= 0) {
+            clearInterval(app.restTimer);
+            playBeep();
+            
+            if (Notification.permission === 'granted') {
+                new Notification('Rest Complete!', {
+                    body: 'Time for your next set',
+                    icon: '💪'
+                });
+            }
+        }
+    }, 1000);
+}
+
+function renderRestCard(container) {
+    const circumference = 2 * Math.PI * 90;
+    const progress = app.restTimeRemaining / (app.currentWorkout.sets[app.currentWorkout.currentSetIndex - 1]?.restAfterSet || 60);
+    
+    container.innerHTML = `
+        <div class="workout-card timer-card" id="restCard">
+            <div class="workout-card-header">
+                <div class="workout-card-title">Rest Time</div>
+            </div>
+            <div class="workout-card-body">
+                <div class="timer-progress">
+                    <svg width="200" height="200">
+                        <circle class="timer-progress-bg" cx="100" cy="100" r="90"></circle>
+                        <circle class="timer-progress-fill" cx="100" cy="100" r="90"
+                            stroke-dasharray="${circumference}"
+                            stroke-dashoffset="${circumference * (1 - progress)}"
+                            id="progressCircle"></circle>
+                    </svg>
+                    <div class="timer-value-overlay" id="timerValue">${formatTime(app.restTimeRemaining)}</div>
+                </div>
+                <div class="workout-controls">
+                    <button class="control-btn" onclick="adjustRestTime(-30)">-30s</button>
+                    <button class="control-btn" onclick="adjustRestTime(30)">+30s</button>
+                </div>
+            </div>
+            <div class="swipe-hint">
+                Swipe right to skip rest →<br>
+                Swipe up to add exercise ↑
+            </div>
+        </div>
+    `;
+
+    setupRestSwipe();
+}
+
+function updateRestDisplay() {
+    const timerValue = document.getElementById('timerValue');
+    if (timerValue) {
+        timerValue.textContent = formatTime(app.restTimeRemaining);
+    }
+}
+
+function adjustRestTime(delta) {
+    app.restTimeRemaining = Math.max(0, app.restTimeRemaining + delta);
+    updateRestDisplay();
+    vibrate(30);
+}
+
+function setupRestSwipe() {
+    const card = document.getElementById('restCard');
+    let startX, startY, currentX, currentY, isDragging = false;
+
+    card.addEventListener('touchstart', (e) => {
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        isDragging = true;
+    });
+
+    card.addEventListener('touchmove', (e) => {
+        if (!isDragging) return;
+        currentX = e.touches[0].clientX;
+        currentY = e.touches[0].clientY;
+        const deltaX = currentX - startX;
+        const deltaY = currentY - startY;
+        card.style.transform = `translate(calc(-50% + ${deltaX}px), calc(-50% + ${deltaY}px))`;
+    });
+
+    card.addEventListener('touchend', () => {
+        if (!isDragging) return;
+        isDragging = false;
+        
+        const deltaX = currentX - startX;
+        const deltaY = currentY - startY;
+        
+        if (deltaX > window.innerWidth * 0.3) {
+            endRest();
+        } else if (deltaY < -100) {
+            showInjectExerciseModal();
+        } else {
+            card.style.transform = 'translate(-50%, -50%)';
+        }
+    });
+}
+
+function endRest() {
+    clearInterval(app.restTimer);
+    app.isResting = false;
+    vibrate([50, 50]);
+    renderWorkoutCard();
+}
+
+function playBeep() {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    
+    oscillator.frequency.value = 800;
+    oscillator.type = 'sine';
+    
+    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+    
+    oscillator.start(audioContext.currentTime);
+    oscillator.stop(audioContext.currentTime + 0.3);
+}
+
+function renderCongratsCard(container) {
+    saveWorkoutSession();
+    
+    container.innerHTML = `
+        <div class="workout-card congrats-card" id="congratsCard">
+            <div class="congrats-icon">🎉</div>
+            <div class="workout-card-header">
+                <div class="workout-card-title">Workout Complete!</div>
+                <div class="workout-card-subtitle">Great job! You completed ${app.currentWorkout.completedSets.length} sets</div>
+            </div>
+            <button class="btn btn-primary" onclick="if(app.currentWorkout) app.currentWorkout.isOngoing = false; loadPage('home'); window.history.pushState({page: 'home'}, '', '#home');">Back to Home</button>
+            ${!app.currentWorkout.planId ? '<button class="btn btn-secondary" onclick="saveWorkoutAsPlan()">Save as New Plan</button>' : ''}
+            <div class="swipe-hint">
+                Swipe right to end workout →<br>
+                Swipe up to add more exercises ↑
+            </div>
+        </div>
+    `;
+    
+    setupCongratsSwipe();
+    vibrate([100, 50, 100, 50, 100]);
+}
+
+function setupCongratsSwipe() {
+    const card = document.getElementById('congratsCard');
+    let startX, startY, currentX, currentY, isDragging = false;
+
+    card.addEventListener('touchstart', (e) => {
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        isDragging = true;
+    });
+
+    card.addEventListener('touchmove', (e) => {
+        if (!isDragging) return;
+        currentX = e.touches[0].clientX;
+        currentY = e.touches[0].clientY;
+        const deltaX = currentX - startX;
+        const deltaY = currentY - startY;
+        card.style.transform = `translate(calc(-50% + ${deltaX}px), calc(-50% + ${deltaY}px))`;
+    });
+
+    card.addEventListener('touchend', () => {
+        if (!isDragging) return;
+        isDragging = false;
+        
+        const deltaX = currentX - startX;
+        const deltaY = currentY - startY;
+        
+        if (deltaX > window.innerWidth * 0.3) {
+            if (app.currentWorkout) app.currentWorkout.isOngoing = false;
+            loadPage('home');
+            window.history.pushState({page: 'home'}, '', '#home');
+        } else if (deltaY < -100) {
+            showInjectExerciseModal();
+        } else {
+            card.style.transform = 'translate(-50%, -50%)';
+        }
+    });
+}
+
+async function saveWorkoutSession() {
+    const session = {
+        id: generateId(),
+        workoutPlanId: app.currentWorkout.planId,
+        workoutPlanName: app.currentWorkout.planName,
+        startTime: app.currentWorkout.startTime,
+        endTime: Date.now(),
+        completedSets: app.currentWorkout.completedSets,
+        skippedSets: app.currentWorkout.sets.length - app.currentWorkout.completedSets.length,
+        status: 'completed'
+    };
+
+    await app.db.add('workoutSessions', session);
+    app.currentWorkout.isOngoing = false;   // ← ADD THIS LINE
+    showToast('Workout saved!');
+}
+
+async function showInjectExerciseModal() {
+    app.selectedExercises = {};
+    const exercises = await app.db.getAll('exercises');
+    
+    document.getElementById('injectExerciseForm').innerHTML = `
+        <div class="form-group">
+            <div class="search-box" style="margin-bottom:12px;">
+                <input type="text" class="search-input" id="injectSearch" placeholder="Search exercises..." oninput="filterExerciseCheckboxList('injectSearch','injectCheckboxGroups')">
+            </div>
+            <div id="injectCheckboxGroups" style="max-height:260px;overflow-y:auto;"></div>
+        </div>
+        <div class="form-group" id="injectRepsGroup">
+            <label class="form-label">Reps</label>
+            <input type="number" class="form-input" id="injectReps" value="10" min="1">
+        </div>
+        <div class="form-group" id="injectDurationGroup" style="display:none;">
+            <label class="form-label">Duration (seconds)</label>
+            <input type="number" class="form-input" id="injectDuration" value="30" min="1">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Weight (kg, optional)</label>
+            <input type="number" class="form-input" id="injectWeight" step="0.5">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Rest After (seconds)</label>
+            <input type="number" class="form-input" id="injectRest" value="60" min="0">
+        </div>
+        <div id="injectSelectedConfig" style="margin-bottom:12px;"></div>
+        <button type="button" class="btn btn-success" onclick="injectExercise()">Add Exercise</button>
+    `;
+
+    renderExerciseCheckboxGroups(exercises, 'injectCheckboxGroups');
+    document.getElementById('injectExerciseModal').classList.add('active');
+}
+
+function injectExercise() {
+    const selected = Object.values(app.selectedExercises);
+    if (selected.length === 0) {
+        alert('Please select at least one exercise');
+        return;
+    }
+
+    const exercises = selected.map(ex => ({
+        exerciseId: ex.exerciseId,
+        exerciseName: ex.exerciseName,
+        type: ex.type,
+        reps: ex.reps || 0,
+        duration: ex.duration || 0,
+        weight: ex.weight || 0
+    }));
+
+    const newSet = {
+        exercises: exercises,
+        restAfterSet: parseInt(document.getElementById('injectRest').value)
+    };
+
+    app.currentWorkout.sets.splice(app.currentWorkout.currentSetIndex, 0, newSet);
+    app.selectedExercises = {};
+
+    closeModal('injectExerciseModal');
+    vibrate([50, 50]);
+    showToast('Exercise injected!');
+
+    if (app.isResting) {
+        clearInterval(app.restTimer);
+        app.isResting = false;
+    }
+
+    renderWorkoutCard();
+}
+
+function renderExerciseCheckboxGroups(exercises, containerId, searchTerm = '') {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    const filtered = searchTerm
+        ? exercises.filter(e => e.name.toLowerCase().includes(searchTerm.toLowerCase()))
+        : exercises;
+
+    const grouped = filtered.reduce((acc, ex) => {
+        if (!acc[ex.category]) acc[ex.category] = [];
+        acc[ex.category].push(ex);
+        return acc;
+    }, {});
+
+    if (Object.keys(grouped).length === 0) {
+        container.innerHTML = '<p style="color:var(--text-secondary);padding:10px;">No exercises found</p>';
+        return;
+    }
+
+    container.innerHTML = Object.entries(grouped).map(([category, exs]) => `
+        <div style="margin-bottom:12px;">
+            <div style="
+                padding: 6px 10px;
+                background: var(--bg-card);
+                border-radius: 8px;
+                font-size: 13px;
+                font-weight: 600;
+                color: var(--secondary);
+                text-transform: capitalize;
+                margin-bottom: 6px;
+                letter-spacing: 0.5px;
+            ">
+                ${getCategoryEmoji(category)} ${category}
+            </div>
+            ${exs.map(ex => `
+                <label style="
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    padding: 10px 12px;
+                    background: ${app.selectedExercises[ex.id] ? 'rgba(0,119,255,0.15)' : 'var(--bg-dark)'};
+                    border-radius: 8px;
+                    margin-bottom: 4px;
+                    cursor: pointer;
+                    font-size: 14px;
+                    border: 1px solid ${app.selectedExercises[ex.id] ? 'var(--primary)' : 'transparent'};
+                    transition: background 0.2s;
+                ">
+                    <input type="checkbox"
+                        value="${ex.id}"
+                        data-name="${ex.name}"
+                        data-type="${ex.type}"
+                        ${app.selectedExercises[ex.id] ? 'checked' : ''}
+                        onchange="toggleExerciseSelection('${ex.id}', '${ex.name}', ${ex.type}, this, '${containerId}')"
+                        style="width:16px;height:16px;accent-color:var(--primary);">
+                    <span style="flex:1;">${ex.name}</span>
+                    <span style="
+                        font-size:11px;
+                        padding:2px 8px;
+                        border-radius:10px;
+                        background: ${ex.type === 1 ? 'rgba(0,212,170,0.15)' : 'rgba(108,92,231,0.15)'};
+                        color: ${ex.type === 1 ? 'var(--secondary)' : 'var(--accent)'};
+                    ">${ex.type === 1 ? 'Reps' : 'Duration'}</span>
+                </label>
+            `).join('')}
+        </div>
+    `).join('');
+}
+
+function toggleExerciseSelection(id, name, type, checkbox, containerId) {
+    if (checkbox.checked) {
+        app.selectedExercises[id] = { exerciseId: id, exerciseName: name, type: type, reps: 10, duration: 30, weight: 0 };
+    } else {
+        delete app.selectedExercises[id];
+    }
+
+    // Update row highlight
+    const label = checkbox.closest('label');
+    if (label) {
+        label.style.background = checkbox.checked ? 'rgba(0,119,255,0.15)' : 'var(--bg-dark)';
+        label.style.border = `1px solid ${checkbox.checked ? 'var(--primary)' : 'transparent'}`;
+    }
+
+    // Determine which config container to update
+    const configId = containerId === 'injectCheckboxGroups' ? 'injectSelectedConfig' : 'selectedExercisesConfig';
+    renderSelectedExercisesConfig(configId);
+}
+
+function renderSelectedExercisesConfig(configId) {
+    const container = document.getElementById(configId);
+    if (!container) return;
+
+    const selected = Object.values(app.selectedExercises);
+    if (selected.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+
+    container.innerHTML = `
+        <div style="margin-top:16px;">
+            <div style="font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">
+                Configure Selected Exercises
+            </div>
+            ${selected.map(ex => `
+                <div style="
+                    background: var(--bg-card);
+                    border-radius: 10px;
+                    padding: 12px;
+                    margin-bottom: 8px;
+                    border-left: 3px solid var(--primary);
+                ">
+                    <div style="font-weight:600;margin-bottom:10px;font-size:14px;">💪 ${ex.exerciseName}</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                        ${ex.type === 1 ? `
+                            <div>
+                                <label style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:4px;">REPS</label>
+                                <input type="number" class="form-input" value="${ex.reps}" min="1"
+                                    style="padding:8px;font-size:14px;"
+                                    onchange="updateSelectedExercise('${ex.exerciseId}', 'reps', this.value)">
+                            </div>
+                        ` : `
+                            <div>
+                                <label style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:4px;">DURATION (s)</label>
+                                <input type="number" class="form-input" value="${ex.duration}" min="1"
+                                    style="padding:8px;font-size:14px;"
+                                    onchange="updateSelectedExercise('${ex.exerciseId}', 'duration', this.value)">
+                            </div>
+                        `}
+                        <div>
+                            <label style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:4px;">WEIGHT (kg)</label>
+                            <input type="number" class="form-input" value="${ex.weight || ''}" min="0" step="0.5" placeholder="0"
+                                style="padding:8px;font-size:14px;"
+                                onchange="updateSelectedExercise('${ex.exerciseId}', 'weight', this.value)">
+                        </div>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function updateSelectedExercise(id, field, value) {
+    if (app.selectedExercises[id]) {
+        app.selectedExercises[id][field] = field === 'weight' ? parseFloat(value) || 0 : parseInt(value) || 0;
+    }
+}
+
+function filterExerciseCheckboxList(searchInputId, containerId) {
+    const term = document.getElementById(searchInputId).value;
+    app.db.getAll('exercises').then(exercises => {
+        renderExerciseCheckboxGroups(exercises, containerId, term);
+    });
+}
+
+function getCategoryEmoji(category) {
+    const map = {
+        chest: '🫁', back: '🔙', legs: '🦵', core: '🎯',
+        arms: '💪', shoulders: '🏔️', 'full-body': '⚡'
+    };
+    return map[category] || '🏋️';
+}
+
+
+async function loadStatistics(range = '7') {
+    const sessions = await app.db.getAll('workoutSessions');
+    const container = document.getElementById('statsContent');
+    
+    if (sessions.length === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📊</div><p>No workout data yet</p></div>';
+        return;
+    }
+
+    const now = Date.now();
+    const daysMap = {'7': 7, '30': 30, '365': 365, 'all': 9999};
+    const days = daysMap[range];
+    const cutoff = now - (days * 24 * 60 * 60 * 1000);
+    
+    const filtered = sessions.filter(s => s.startTime >= cutoff);
+    
+    const totalSets = filtered.reduce((sum, s) => sum + s.completedSets.length, 0);
+    const totalWorkouts = filtered.length;
+    
+    const exerciseStats = {};
+    filtered.forEach(session => {
+        session.completedSets.forEach(set => {
+            if (!exerciseStats[set.exerciseId]) {
+                exerciseStats[set.exerciseId] = {
+                    name: set.exerciseName,
+                    type: set.type,
+                    totalSets: 0,
+                    totalReps: 0,
+                    totalDuration: 0,
+                    totalWeight: 0,
+                    maxReps: 0,
+                    maxWeight: 0,
+                    dates: []
+                };
+            }
+            
+            const stats = exerciseStats[set.exerciseId];
+            stats.totalSets++;
+            stats.totalReps += set.reps || 0;
+            stats.totalDuration += set.duration || 0;
+            stats.totalWeight += set.weight || 0;
+            stats.maxReps = Math.max(stats.maxReps, set.reps || 0);
+            stats.maxWeight = Math.max(stats.maxWeight, set.weight || 0);
+            stats.dates.push(set.completedAt);
+        });
+    });
+
+    Object.keys(app.chartInstances).forEach(key => {
+        app.chartInstances[key].destroy();
+    });
+    app.chartInstances = {};
+
+    container.innerHTML = `
+        <div class="stat-grid">
+            <div class="stat-card">
+                <div class="stat-value">${totalWorkouts}</div>
+                <div class="stat-label">Total Workouts</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">${totalSets}</div>
+                <div class="stat-label">Total Sets</div>
+            </div>
+        </div>
+        
+        <div class="chart-container">
+            <canvas id="workoutChart"></canvas>
+        </div>
+        
+        <h3 style="margin: 20px 0 12px;">Exercise Breakdown</h3>
+        ${Object.entries(exerciseStats).map(([id, stats]) => `
+            <div class="card" style="margin-bottom: 12px;">
+                <div class="card-title">${stats.name}</div>
+                <div style="margin-top: 10px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 14px;">
+                    <div><span style="color: var(--text-secondary);">Sets:</span> ${stats.totalSets}</div>
+                    ${stats.type === 1 ? `
+                        <div><span style="color: var(--text-secondary);">Total Reps:</span> ${stats.totalReps}</div>
+                        <div><span style="color: var(--text-secondary);">Max Reps:</span> ${stats.maxReps}</div>
+                    ` : `
+                        <div><span style="color: var(--text-secondary);">Total Time:</span> ${formatTime(stats.totalDuration)}</div>
+                    `}
+                    ${stats.totalWeight > 0 ? `
+                        <div><span style="color: var(--text-secondary);">Total Weight:</span> ${stats.totalWeight}kg</div>
+                        <div><span style="color: var(--text-secondary);">Max Weight:</span> ${stats.maxWeight}kg</div>
+                    ` : ''}
+                </div>
+            </div>
+        `).join('')}
+    `;
+
+    const workoutDates = {};
+    filtered.forEach(session => {
+        const date = new Date(session.startTime).toLocaleDateString();
+        workoutDates[date] = (workoutDates[date] || 0) + session.completedSets.length;
+    });
+
+    const sortedDates = Object.keys(workoutDates).sort((a, b) => new Date(a) - new Date(b));
+    const chartData = sortedDates.map(date => workoutDates[date]);
+
+    const ctx = document.getElementById('workoutChart');
+    app.chartInstances.workout = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: sortedDates,
+            datasets: [{
+                label: 'Sets Completed',
+                data: chartData,
+                borderColor: '#00A8FF',
+                backgroundColor: 'rgba(0, 168, 255, 0.1)',
+                tension: 0.4,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    labels: {
+                        color: '#FFFFFF'
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    ticks: {
+                        color: '#B0BEC5'
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    }
+                },
+                y: {
+                    ticks: {
+                        color: '#B0BEC5'
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)'
+                    }
+                }
+            }
+        }
+    });
+}
+
+async function loadHistory() {
+    const sessions = await app.db.getAll('workoutSessions');
+    const sorted = sessions.sort((a, b) => b.startTime - a.startTime);
+    
+    const container = document.getElementById('historyList');
+    
+    if (sorted.length === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📅</div><p>No workout history</p></div>';
+        return;
+    }
+
+    container.innerHTML = sorted.map(session => {
+        const duration = Math.round((session.endTime - session.startTime) / 1000 / 60);
+        return `
+            <div class="card">
+                <div class="card-header">
+                    <div>
+                        <div class="card-title">${session.workoutPlanName}</div>
+                        <div class="card-subtitle">${formatDate(session.startTime)}</div>
+                    </div>
+                    <button class="icon-btn" onclick="deleteSession('${session.id}')">🗑️</button>
+                </div>
+                <div style="margin-top: 12px; font-size: 14px; color: var(--text-secondary);">
+                    ${session.completedSets.length} sets completed • ${duration} minutes
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function deleteSession(id) {
+    if (confirm('Delete this workout session?')) {
+        await app.db.delete('workoutSessions', id);
+        await loadHistory();
+        showToast('Session deleted');
+        vibrate();
+    }
+}
+
+async function exportData() {
+    const data = {
+        exercises: await app.db.getAll('exercises'),
+        workoutPlans: await app.db.getAll('workoutPlans'),
+        workoutSessions: await app.db.getAll('workoutSessions'),
+        exportDate: Date.now()
+    };
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `workout-tracker-backup-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    showToast('Data exported!');
+    vibrate();
+}
+
+async function importData(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+
+        if (confirm('This will replace all existing data. Continue?')) {
+            await app.db.clear('exercises');
+            await app.db.clear('workoutPlans');
+            await app.db.clear('workoutSessions');
+
+            for (const ex of data.exercises || []) {
+                await app.db.add('exercises', ex);
+            }
+            for (const plan of data.workoutPlans || []) {
+                await app.db.add('workoutPlans', plan);
+            }
+            for (const session of data.workoutSessions || []) {
+                await app.db.add('workoutSessions', session);
+            }
+
+            showToast('Data imported successfully!');
+            await loadPage(app.currentPage);
+            vibrate([50, 50, 50]);
+        }
+    } catch (error) {
+        alert('Error importing data: ' + error.message);
+    }
+
+    e.target.value = '';
+}
+
+async function deleteAllData() {
+    if (confirm('⚠️ This will delete ALL your data including exercises, plans, and history. This cannot be undone. Continue?')) {
+        if (confirm('Are you absolutely sure? This is your last chance!')) {
+            await app.db.clear('exercises');
+            await app.db.clear('workoutPlans');
+            await app.db.clear('workoutSessions');
+            
+            await initPresetExercises();
+            showToast('All data deleted');
+            await loadPage('home');
+            vibrate(200);
+        }
+    }
+}
+
+async function saveWorkoutAsPlan() {
+    const planName = prompt('Enter workout plan name:', `${app.currentWorkout.planName} - ${new Date().toLocaleDateString()}`);
+    if (!planName) return;
+
+    const exerciseGroups = {};
+    app.currentWorkout.completedSets.forEach(set => {
+        const key = `${set.exerciseId}-${set.reps}-${set.duration}-${set.weight}`;
+        if (!exerciseGroups[key]) {
+            exerciseGroups[key] = {
+                exerciseId: set.exerciseId,
+                exerciseName: set.exerciseName,
+                type: set.type,
+                reps: set.reps,
+                duration: set.duration,
+                weight: set.weight,
+                count: 0
+            };
+        }
+        exerciseGroups[key].count++;
+    });
+
+    const exercises = Object.values(exerciseGroups).map((ex, idx) => ({
+        setIndex: idx,
+        exercises: [{
+            exerciseId: ex.exerciseId,
+            exerciseName: ex.exerciseName,
+            type: ex.type,
+            sets: ex.count,
+            reps: ex.reps,
+            duration: ex.duration,
+            weight: ex.weight
+        }],
+        restAfterSet: 60
+    }));
+
+    const plan = {
+        id: generateId(),
+        name: planName,
+        exercises: exercises,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+    };
+
+    await app.db.add('workoutPlans', plan);
+    showToast('Workout saved as new plan!');
+    vibrate([50, 50, 50]);
+}
+
+async function showExerciseStats(exerciseId) {
+    const exercise = await app.db.get('exercises', exerciseId);
+    const sessions = await app.db.getAll('workoutSessions');
+    
+    const stats = {
+        totalSets: 0,
+        totalReps: 0,
+        totalDuration: 0,
+        totalWeight: 0,
+        maxReps: 0,
+        maxWeight: 0,
+        dates: [],
+        sessions: []
+    };
+
+    sessions.forEach(session => {
+        let sessionSets = 0;
+        session.completedSets.forEach(set => {
+            if (set.exerciseId === exerciseId) {
+                stats.totalSets++;
+                stats.totalReps += set.reps || 0;
+                stats.totalDuration += set.duration || 0;
+                stats.totalWeight += set.weight || 0;
+                stats.maxReps = Math.max(stats.maxReps, set.reps || 0);
+                stats.maxWeight = Math.max(stats.maxWeight, set.weight || 0);
+                stats.dates.push(set.completedAt);
+                sessionSets++;
+            }
+        });
+        if (sessionSets > 0) {
+            stats.sessions.push({
+                date: session.startTime,
+                sets: sessionSets
+            });
+        }
+    });
+
+    const modal = document.createElement('div');
+    modal.className = 'modal active';
+    modal.id = 'exerciseStatsModal';
+    modal.innerHTML = `
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h2 class="modal-title">${exercise.name}</h2>
+                <button class="modal-close" onclick="closeExerciseStats()">×</button>
+            </div>
+            <div style="margin-bottom: 20px;">
+                <span class="exercise-badge type-${exercise.type}">
+                    ${exercise.type === 1 ? 'Reps Based' : 'Duration Based'}
+                </span>
+                <span class="exercise-badge">${exercise.category}</span>
+            </div>
+            
+            ${stats.totalSets > 0 ? `
+                <div class="stat-grid" style="margin-bottom: 20px;">
+                    <div class="stat-card">
+                        <div class="stat-value">${stats.totalSets}</div>
+                        <div class="stat-label">Total Sets</div>
+                    </div>
+                    ${exercise.type === 1 ? `
+                        <div class="stat-card">
+                            <div class="stat-value">${stats.totalReps}</div>
+                            <div class="stat-label">Total Reps</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">${stats.maxReps}</div>
+                            <div class="stat-label">Max Reps</div>
+                        </div>
+                    ` : `
+                        <div class="stat-card">
+                            <div class="stat-value">${formatTime(stats.totalDuration)}</div>
+                            <div class="stat-label">Total Time</div>
+                        </div>
+                    `}
+                    ${stats.totalWeight > 0 ? `
+                        <div class="stat-card">
+                            <div class="stat-value">${Math.round(stats.totalWeight)}kg</div>
+                            <div class="stat-label">Total Weight</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">${stats.maxWeight}kg</div>
+                            <div class="stat-label">Max Weight</div>
+                        </div>
+                    ` : ''}
+                </div>
+                
+                <h3 style="margin-bottom: 12px; font-size: 16px;">Recent Sessions</h3>
+                <div style="max-height: 200px; overflow-y: auto;">
+                    ${stats.sessions.sort((a, b) => b.date - a.date).slice(0, 10).map(s => `
+                        <div style="background: var(--bg-card); padding: 12px; border-radius: 8px; margin-bottom: 8px;">
+                            <div style="font-size: 14px;">${formatDate(s.date)}</div>
+                            <div style="font-size: 12px; color: var(--text-secondary);">${s.sets} sets performed</div>
+                        </div>
+                    `).join('')}
+                </div>
+            ` : `
+                <div class="empty-state">
+                    <p>No workout data for this exercise yet</p>
+                </div>
+            `}
+            
+            <div style="margin-top: 20px; display: flex; gap: 8px;">
+                ${!exercise.isPreset ? `
+                    <button class="btn btn-secondary" onclick="closeExerciseStats(); editExercise('${exerciseId}');" style="flex: 1;">Edit</button>
+                    <button class="btn btn-danger" onclick="closeExerciseStats(); deleteExercise('${exerciseId}');" style="flex: 1;">Delete</button>
+                ` : `
+                    <button class="btn btn-secondary" onclick="closeExerciseStats()" style="width: 100%;">Close</button>
+                `}
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    setupExerciseStatsSwipe();
+    vibrate(50);
+}
+
+function closeExerciseStats() {
+    const modal = document.getElementById('exerciseStatsModal');
+    if (modal) {
+        modal.remove();
+    }
+}
+
+function setupExerciseStatsSwipe() {
+    const modal = document.getElementById('exerciseStatsModal');
+    const content = modal.querySelector('.modal-content');
+    let startY, currentY, isDragging = false;
+
+    content.addEventListener('touchstart', (e) => {
+        startY = e.touches[0].clientY;
+        isDragging = true;
+    });
+
+    content.addEventListener('touchmove', (e) => {
+        if (!isDragging) return;
+        currentY = e.touches[0].clientY;
+        const deltaY = currentY - startY;
+        
+        if (deltaY > 0) {
+            content.style.transform = `translateY(${deltaY}px)`;
+            modal.style.backgroundColor = `rgba(0, 0, 0, ${0.8 - (deltaY / 500)})`;
+        }
+    });
+
+    content.addEventListener('touchend', () => {
+        if (!isDragging) return;
+        isDragging = false;
+        
+        const deltaY = currentY - startY;
+        if (deltaY > 100) {
+            closeExerciseStats();
+        } else {
+            content.style.transform = 'translateY(0)';
+            modal.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+        }
+    });
+}
+
+window.addEventListener('load', initApp);
+
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('data:text/javascript,console.log("SW placeholder")').catch(() => {});
+}

@@ -1,7 +1,7 @@
 const CACHE_NAME = 'workout-tracker-v1';
 const CACHE_URLS = [
   './',
-  './WorkoutTracker.html',
+  './workout.html',
   'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
 ];
 

@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <meta name="theme-color" content="#0077FF">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>Workout Tracker</title>
+    <link rel="manifest" id="pwa-manifest">
+    <script>
+    const manifestData = {
+        name: "Workout Tracker",
+        short_name: "Workout",
+        description: "Track your workouts with rest intervals",
+        start_url: "./",
+        display: "standalone",
+        orientation: "portrait",
+        theme_color: "#0077FF",
+        background_color: "#0A1929",
+        icons: [
+        {
+            src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='24' fill='%230077FF'/%3E%3Ctext x='96' y='130' font-size='120' text-anchor='middle'%3E%F0%9F%92%AA%3C/text%3E%3C/svg%3E",
+            sizes: "192x192",
+            type: "image/svg+xml",
+            purpose: "any maskable"
+        },
+        {
+            src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='64' fill='%230077FF'/%3E%3Ctext x='256' y='340' font-size='320' text-anchor='middle'%3E%F0%9F%92%AA%3C/text%3E%3C/svg%3E",
+            sizes: "512x512",
+            type: "image/svg+xml",
+            purpose: "any maskable"
+        }
+        ]
+    };
+    const blob = new Blob([JSON.stringify(manifestData)], {type: 'application/json'});
+    document.getElementById('pwa-manifest').href = URL.createObjectURL(blob);
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <button class="hamburger-btn" id="hamburgerBtn">
+        <span></span>
+        <span></span>
+        <span></span>
+    </button>
+
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <h2>💪 Workout Tracker</h2>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="nav-item active" data-page="home">🏠 Home</div>
+            <div class="nav-item" data-page="workout-plans">📋 Workout Plans</div>
+            <div class="nav-item" data-page="exercises">🏋️ Exercises</div>
+            <div class="nav-item" data-page="statistics">📊 Statistics</div>
+            <div class="nav-item" data-page="history">📅 History</div>
+            <div class="nav-item" data-page="settings">⚙️ Settings</div>
+        </nav>
+    </div>
+
+    <div class="overlay" id="overlay"></div>
+
+    <div class="main-content">
+        <div class="page active" id="home-page">
+            <h1>Welcome Back!</h1>
+            <div class="card">
+                <div class="card-header">
+                    <div>
+                        <div class="card-title">Quick Start</div>
+                        <div class="card-subtitle">Continue your fitness journey</div>
+                    </div>
+                </div>
+                <button class="btn btn-primary" id="startNewWorkoutBtn">Start New Workout</button>
+            </div>
+            <h2 style="margin-top: 30px; margin-bottom: 15px; font-size: 20px;">Recent Workouts</h2>
+            <div id="recentWorkoutsList"></div>
+        </div>
+
+        <div class="page" id="workout-plans-page">
+            <h1>Workout Plans</h1>
+            <button class="btn btn-primary" id="createPlanBtn">+ Create New Plan</button>
+            <div id="workoutPlansList" style="margin-top: 20px;"></div>
+        </div>
+
+        <div class="page" id="exercises-page">
+            <h1>Exercises</h1>
+            <div class="search-box">
+                <input type="text" class="search-input" id="exerciseSearch" placeholder="Search exercises...">
+                <span class="search-icon">🔍</span>
+            </div>
+            <button class="btn btn-primary" id="createExerciseBtn">+ Create Custom Exercise</button>
+            <div id="exercisesList" style="margin-top: 20px;"></div>
+        </div>
+
+        <div class="page" id="statistics-page">
+            <h1>Statistics</h1>
+            <div class="date-filter">
+                <button class="date-filter-btn active" data-range="7">Last Week</button>
+                <button class="date-filter-btn" data-range="30">Last 30 Days</button>
+                <button class="date-filter-btn" data-range="365">Last Year</button>
+                <button class="date-filter-btn" data-range="all">All Time</button>
+            </div>
+            <div id="statsContent"></div>
+        </div>
+
+        <div class="page" id="history-page">
+            <h1>Workout History</h1>
+            <div id="historyList"></div>
+        </div>
+
+        <div class="page" id="settings-page">
+            <h1>Settings</h1>
+            <div class="card">
+                <div class="card-title" style="margin-bottom: 15px;">Data Management</div>
+                <button class="btn btn-secondary" id="exportDataBtn">📤 Export Data</button>
+                <button class="btn btn-secondary" id="importDataBtn">📥 Import Data</button>
+                <button class="btn btn-danger" id="deleteAllDataBtn" style="margin-top: 30px;">🗑️ Delete All Data</button>
+            </div>
+        </div>
+
+        <div class="page" id="active-workout-page">
+            <div class="workout-container" id="workoutContainer"></div>
+        </div>
+    </div>
+
+    <div class="modal" id="exerciseModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="exerciseModalTitle">Create Exercise</h2>
+                <button class="modal-close" onclick="closeModal('exerciseModal')">×</button>
+            </div>
+            <form id="exerciseForm">
+                <div class="form-group">
+                    <label class="form-label">Exercise Name</label>
+                    <input type="text" class="form-input" id="exerciseName" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Type</label>
+                    <select class="form-select" id="exerciseType" required>
+                        <option value="1">Reps Based</option>
+                        <option value="2">Duration Based</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Category</label>
+                    <select class="form-select" id="exerciseCategory">
+                        <option value="chest">Chest</option>
+                        <option value="back">Back</option>
+                        <option value="legs">Legs</option>
+                        <option value="core">Core</option>
+                        <option value="arms">Arms</option>
+                        <option value="shoulders">Shoulders</option>
+                        <option value="full-body">Full Body</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Default Weight (kg, optional)</label>
+                    <input type="number" class="form-input" id="exerciseWeight" step="0.5">
+                </div>
+                <button type="submit" class="btn btn-success">Save Exercise</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal" id="planModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="planModalTitle">Create Workout Plan</h2>
+                <button class="modal-close" onclick="closeModal('planModal')">×</button>
+            </div>
+            <form id="planForm">
+                <div class="form-group">
+                    <label class="form-label">Plan Name</label>
+                    <input type="text" class="form-input" id="planName" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Exercises</label>
+                    <div id="planExercisesList"></div>
+                    <button type="button" class="btn btn-secondary" id="addExerciseToPlanbtn">+ Add Exercise Set</button>
+                </div>
+                <button type="submit" class="btn btn-success">Save Plan</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal" id="addExerciseSetModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Add Exercise Set</h2>
+                <button class="modal-close" onclick="closeModal('addExerciseSetModal')">×</button>
+            </div>
+            <div id="exerciseSetForm"></div>
+        </div>
+    </div>
+
+    <div class="modal" id="selectPlanModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Select Workout Plan</h2>
+                <button class="modal-close" onclick="closeModal('selectPlanModal')">×</button>
+            </div>
+            <div id="selectPlanList"></div>
+        </div>
+    </div>
+
+    <div class="modal" id="injectExerciseModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Inject Exercise</h2>
+                <button class="modal-close" onclick="closeModal('injectExerciseModal')">×</button>
+            </div>
+            <div id="injectExerciseForm"></div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+    <input type="file" id="importFileInput" accept=".json" style="display: none;">
+
+<script src="scripts.js"></script>
+</body>
+</html>
+
