@@ -1591,6 +1591,8 @@
         }
 
         async function startEmptyWorkout() {
+            if (!confirmTerminateIfActive()) return;
+            if (app.currentWorkout && app.currentWorkout.isOngoing) terminateCurrentWorkout();
             app.currentWorkout = {
                 planId: null,
                 planName: 'Custom Workout',
@@ -1615,10 +1617,9 @@
             }
         }
 
-        if (!confirmTerminateIfActive()) return;
-        if (app.currentWorkout && app.currentWorkout.isOngoing) terminateCurrentWorkout();
-
         async function startWorkout(planId) {
+            if (!confirmTerminateIfActive()) return;
+            if (app.currentWorkout && app.currentWorkout.isOngoing) terminateCurrentWorkout();
             const plan = await app.db.get('workoutPlans', planId);
             
             const expandedSets = [];
