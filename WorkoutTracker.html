@@ -1985,7 +1985,7 @@
                         <div class="workout-card-title">Workout Complete!</div>
                         <div class="workout-card-subtitle">Great job! You completed ${app.currentWorkout.completedSets.length} sets</div>
                     </div>
-                    <button class="btn btn-primary" onclick="loadPage('home'); window.history.pushState({page: 'home'}, '', '#home');">Back to Home</button>
+                    <button class="btn btn-primary" onclick="if(app.currentWorkout) app.currentWorkout.isOngoing = false; loadPage('home'); window.history.pushState({page: 'home'}, '', '#home');">Back to Home</button>
                     ${!app.currentWorkout.planId ? '<button class="btn btn-secondary" onclick="saveWorkoutAsPlan()">Save as New Plan</button>' : ''}
                     <div class="swipe-hint">
                         Swipe right to end workout →<br>
@@ -2025,6 +2025,7 @@
                 const deltaY = currentY - startY;
                 
                 if (deltaX > window.innerWidth * 0.3) {
+                    if (app.currentWorkout) app.currentWorkout.isOngoing = false;
                     loadPage('home');
                     window.history.pushState({page: 'home'}, '', '#home');
                 } else if (deltaY < -100) {
@@ -2048,6 +2049,7 @@
             };
 
             await app.db.add('workoutSessions', session);
+            app.currentWorkout.isOngoing = false;   // ← ADD THIS LINE
             showToast('Workout saved!');
         }
 
