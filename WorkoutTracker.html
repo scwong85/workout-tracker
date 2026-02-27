@@ -1028,7 +1028,8 @@
             editingPlanId: null,
             editingExerciseId: null,
             currentPlanExercises: [],
-            chartInstances: {}
+            chartInstances: {},
+            selectedExercises: {}
         };
 
         async function initApp() {
@@ -1376,6 +1377,7 @@
         }
 
         async function showAddExerciseSetModal() {
+            app.selectedExercises = {};
             const exercises = await app.db.getAll('exercises');
             
             document.getElementById('exerciseSetForm').innerHTML = `
@@ -1405,6 +1407,7 @@
                     <label class="form-label">Rest After Set (seconds)</label>
                     <input type="number" class="form-input" id="setRest" value="60" min="0">
                 </div>
+                <div id="selectedExercisesConfig" style="margin-bottom:12px;"></div>
                 <button type="button" class="btn btn-success" onclick="addExerciseSetToPlan()">Add to Plan</button>
             `;
 
@@ -1412,22 +1415,21 @@
             document.getElementById('addExerciseSetModal').classList.add('active');
         }
 
-
         function addExerciseSetToPlan() {
-            const checkboxes = document.querySelectorAll('#exerciseCheckboxGroups input[type="checkbox"]:checked');
-            if (checkboxes.length === 0) {
+            const selected = Object.values(app.selectedExercises);
+            if (selected.length === 0) {
                 alert('Please select at least one exercise');
                 return;
             }
 
-            const exercises = Array.from(checkboxes).map(cb => ({
-                exerciseId: cb.value,
-                exerciseName: cb.dataset.name,
-                type: parseInt(cb.dataset.type),
+            const exercises = selected.map(ex => ({
+                exerciseId: ex.exerciseId,
+                exerciseName: ex.exerciseName,
+                type: ex.type,
                 sets: parseInt(document.getElementById('setSets').value),
-                reps: parseInt(document.getElementById('setReps').value) || 0,
-                duration: parseInt(document.getElementById('setDuration').value) || 0,
-                weight: parseFloat(document.getElementById('setWeight').value) || 0
+                reps: ex.reps || 0,
+                duration: ex.duration || 0,
+                weight: ex.weight || 0
             }));
 
             app.currentPlanExercises.push({
@@ -1436,6 +1438,7 @@
                 restAfterSet: parseInt(document.getElementById('setRest').value)
             });
 
+            app.selectedExercises = {};
             renderPlanExercisesList();
             closeModal('addExerciseSetModal');
             vibrate();
@@ -1930,6 +1933,7 @@
         }
 
         async function showInjectExerciseModal() {
+            app.selectedExercises = {};
             const exercises = await app.db.getAll('exercises');
             
             document.getElementById('injectExerciseForm').innerHTML = `
@@ -1955,6 +1959,7 @@
                     <label class="form-label">Rest After (seconds)</label>
                     <input type="number" class="form-input" id="injectRest" value="60" min="0">
                 </div>
+                <div id="injectSelectedConfig" style="margin-bottom:12px;"></div>
                 <button type="button" class="btn btn-success" onclick="injectExercise()">Add Exercise</button>
             `;
 
@@ -1962,21 +1967,20 @@
             document.getElementById('injectExerciseModal').classList.add('active');
         }
 
-
         function injectExercise() {
-            const checkboxes = document.querySelectorAll('#injectCheckboxGroups input[type="checkbox"]:checked');
-            if (checkboxes.length === 0) {
+            const selected = Object.values(app.selectedExercises);
+            if (selected.length === 0) {
                 alert('Please select at least one exercise');
                 return;
             }
 
-            const exercises = Array.from(checkboxes).map(cb => ({
-                exerciseId: cb.value,
-                exerciseName: cb.dataset.name,
-                type: parseInt(cb.dataset.type),
-                reps: parseInt(document.getElementById('injectReps').value) || 0,
-                duration: parseInt(document.getElementById('injectDuration').value) || 0,
-                weight: parseFloat(document.getElementById('injectWeight').value) || 0
+            const exercises = selected.map(ex => ({
+                exerciseId: ex.exerciseId,
+                exerciseName: ex.exerciseName,
+                type: ex.type,
+                reps: ex.reps || 0,
+                duration: ex.duration || 0,
+                weight: ex.weight || 0
             }));
 
             const newSet = {
@@ -1985,16 +1989,17 @@
             };
 
             app.currentWorkout.sets.splice(app.currentWorkout.currentSetIndex, 0, newSet);
+            app.selectedExercises = {};
 
             closeModal('injectExerciseModal');
             vibrate([50, 50]);
             showToast('Exercise injected!');
-            
+
             if (app.isResting) {
                 clearInterval(app.restTimer);
                 app.isResting = false;
             }
-            
+
             renderWorkoutCard();
         }
 
@@ -2038,13 +2043,21 @@
                             align-items: center;
                             gap: 10px;
                             padding: 10px 12px;
-                            background: var(--bg-dark);
+                            background: ${app.selectedExercises[ex.id] ? 'rgba(0,119,255,0.15)' : 'var(--bg-dark)'};
                             border-radius: 8px;
                             margin-bottom: 4px;
                             cursor: pointer;
                             font-size: 14px;
+                            border: 1px solid ${app.selectedExercises[ex.id] ? 'var(--primary)' : 'transparent'};
+                            transition: background 0.2s;
                         ">
-                            <input type="checkbox" value="${ex.id}" data-name="${ex.name}" data-type="${ex.type}" style="width:16px;height:16px;accent-color:var(--primary);">
+                            <input type="checkbox"
+                                value="${ex.id}"
+                                data-name="${ex.name}"
+                                data-type="${ex.type}"
+                                ${app.selectedExercises[ex.id] ? 'checked' : ''}
+                                onchange="toggleExerciseSelection('${ex.id}', '${ex.name}', ${ex.type}, this, '${containerId}')"
+                                style="width:16px;height:16px;accent-color:var(--primary);">
                             <span style="flex:1;">${ex.name}</span>
                             <span style="
                                 font-size:11px;
@@ -2057,6 +2070,84 @@
                     `).join('')}
                 </div>
             `).join('');
+        }
+
+        function toggleExerciseSelection(id, name, type, checkbox, containerId) {
+            if (checkbox.checked) {
+                app.selectedExercises[id] = { exerciseId: id, exerciseName: name, type: type, reps: 10, duration: 30, weight: 0 };
+            } else {
+                delete app.selectedExercises[id];
+            }
+
+            // Update row highlight
+            const label = checkbox.closest('label');
+            if (label) {
+                label.style.background = checkbox.checked ? 'rgba(0,119,255,0.15)' : 'var(--bg-dark)';
+                label.style.border = `1px solid ${checkbox.checked ? 'var(--primary)' : 'transparent'}`;
+            }
+
+            // Determine which config container to update
+            const configId = containerId === 'injectCheckboxGroups' ? 'injectSelectedConfig' : 'selectedExercisesConfig';
+            renderSelectedExercisesConfig(configId);
+        }
+
+        function renderSelectedExercisesConfig(configId) {
+            const container = document.getElementById(configId);
+            if (!container) return;
+
+            const selected = Object.values(app.selectedExercises);
+            if (selected.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+
+            container.innerHTML = `
+                <div style="margin-top:16px;">
+                    <div style="font-size:13px;font-weight:600;color:var(--text-secondary);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.5px;">
+                        Configure Selected Exercises
+                    </div>
+                    ${selected.map(ex => `
+                        <div style="
+                            background: var(--bg-card);
+                            border-radius: 10px;
+                            padding: 12px;
+                            margin-bottom: 8px;
+                            border-left: 3px solid var(--primary);
+                        ">
+                            <div style="font-weight:600;margin-bottom:10px;font-size:14px;">💪 ${ex.exerciseName}</div>
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                                ${ex.type === 1 ? `
+                                    <div>
+                                        <label style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:4px;">REPS</label>
+                                        <input type="number" class="form-input" value="${ex.reps}" min="1"
+                                            style="padding:8px;font-size:14px;"
+                                            onchange="updateSelectedExercise('${ex.exerciseId}', 'reps', this.value)">
+                                    </div>
+                                ` : `
+                                    <div>
+                                        <label style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:4px;">DURATION (s)</label>
+                                        <input type="number" class="form-input" value="${ex.duration}" min="1"
+                                            style="padding:8px;font-size:14px;"
+                                            onchange="updateSelectedExercise('${ex.exerciseId}', 'duration', this.value)">
+                                    </div>
+                                `}
+                                <div>
+                                    <label style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:4px;">WEIGHT (kg)</label>
+                                    <input type="number" class="form-input" value="${ex.weight || ''}" min="0" step="0.5" placeholder="0"
+                                        style="padding:8px;font-size:14px;"
+                                        onchange="updateSelectedExercise('${ex.exerciseId}', 'weight', this.value)">
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        function updateSelectedExercise(id, field, value) {
+            if (app.selectedExercises[id]) {
+                app.selectedExercises[id][field] = field === 'weight' ? parseFloat(value) || 0 : parseInt(value) || 0;
+            }
         }
 
         function filterExerciseCheckboxList(searchInputId, containerId) {
