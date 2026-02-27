@@ -998,8 +998,32 @@
             setTimeout(() => toast.classList.remove('active'), 3000);
         }
 
-        function closeModal(modalId) {
-            document.getElementById(modalId).classList.remove('active');
+        function openModal(modalId) {
+            const el = document.getElementById(modalId);
+            if (!el) return;
+            el.classList.add('active');
+
+            // Track stack + add a history entry so Back closes it
+            app.modalStack.push(modalId);
+            window.history.pushState({ type: 'modal', modalId }, '', window.location.hash || '#home');
+        }
+
+        function closeModal(modalId, opts = {}) {
+            const { fromPopstate = false } = opts;
+
+            const el = document.getElementById(modalId);
+            if (el) el.classList.remove('active');
+
+            // Remove from stack (top or middle)
+            const idx = app.modalStack.lastIndexOf(modalId);
+            if (idx !== -1) app.modalStack.splice(idx, 1);
+
+            // If user pressed X (not back), keep history consistent by going back 1 step
+            if (!fromPopstate) {
+                if (window.history.state && window.history.state.type === 'modal') {
+                    window.history.back();
+                }
+            }
         }
 
         function formatTime(seconds) {
@@ -1029,6 +1053,7 @@
             editingExerciseId: null,
             currentPlanExercises: [],
             chartInstances: {},
+            modalStack: [],
             selectedExercises: {}
         };
 
@@ -1059,16 +1084,27 @@
         }
 
         function setupBackButtonNavigation() {
-            window.history.pushState({page: 'home'}, '', '#home');
-            
-            window.addEventListener('popstate', (e) => {
-                if (app.currentPage === 'active-workout' && app.currentWorkout) {
+            // Make initial state “home” without adding extra history entry
+            window.history.replaceState({ type:'page', page:'home' }, '', '#home');
+
+            window.addEventListener('popstate', async (e) => {
+                // 1) If any modal (“card”) is open, close it and stop.
+                if (app.modalStack && app.modalStack.length > 0) {
+                    const top = app.modalStack[app.modalStack.length - 1];
+                    closeModal(top, { fromPopstate: true });
                     return;
                 }
-                
-                e.preventDefault();
-                loadPage('home');
-                window.history.pushState({page: 'home'}, '', '#home');
+
+                // 2) If workout is ongoing and user hits back while on workout page => go Home (keep workout active)
+                if (app.currentPage === 'active-workout' && app.currentWorkout && app.currentWorkout.isOngoing) {
+                    await loadPage('home');
+                    window.history.replaceState({ type:'page', page:'home' }, '', '#home');
+                    return;
+                }
+
+                // 3) Otherwise follow history state (or default to home)
+                const page = (e.state && e.state.type === 'page' && e.state.page) ? e.state.page : 'home';
+                await loadPage(page);
             });
         }
 
@@ -1088,7 +1124,10 @@
             });
 
             document.getElementById('startNewWorkoutBtn').addEventListener('click', () => {
-                document.getElementById('selectPlanModal').classList.add('active');
+                if (!confirmTerminateIfActive()) return;
+                if (app.currentWorkout && app.currentWorkout.isOngoing) terminateCurrentWorkout();
+
+                openModal('selectPlanModal');
                 loadWorkoutPlanSelector();
             });
 
@@ -1096,7 +1135,7 @@
                 app.editingExerciseId = null;
                 document.getElementById('exerciseModalTitle').textContent = 'Create Exercise';
                 document.getElementById('exerciseForm').reset();
-                document.getElementById('exerciseModal').classList.add('active');
+                openModal('exerciseModal');
             });
 
             document.getElementById('exerciseForm').addEventListener('submit', handleExerciseSubmit);
@@ -1110,7 +1149,7 @@
                 document.getElementById('planModalTitle').textContent = 'Create Workout Plan';
                 document.getElementById('planForm').reset();
                 document.getElementById('planExercisesList').innerHTML = '';
-                document.getElementById('planModal').classList.add('active');
+                openModal('planModal');
             });
 
             document.getElementById('planForm').addEventListener('submit', handlePlanSubmit);
@@ -1183,6 +1222,35 @@
             const sessions = await app.db.getAll('workoutSessions');
             const recent = sessions.sort((a, b) => b.startTime - a.startTime).slice(0, 5);
             
+            const activeHolderId = 'activeWorkoutHolder';
+            let activeHolder = document.getElementById(activeHolderId);
+            if (!activeHolder) {
+                // Create a holder above recent workouts list (once)
+                const homePage = document.getElementById('home-page');
+                activeHolder = document.createElement('div');
+                activeHolder.id = activeHolderId;
+                // Put it right after Quick Start card (approx)
+                homePage.insertBefore(activeHolder, homePage.querySelector('#recentWorkoutsList'));
+            }
+
+            if (app.currentWorkout && app.currentWorkout.isOngoing) {
+                const total = app.currentWorkout.sets.length;
+                const done = app.currentWorkout.completedSets.length;
+                activeHolder.innerHTML = `
+                    <div class="card" style="border:1px solid rgba(0,119,255,0.35);">
+                        <div class="card-header">
+                            <div>
+                                <div class="card-title">Active workout</div>
+                                <div class="card-subtitle">${app.currentWorkout.planName} • ${done} sets logged • ${total} queued</div>
+                            </div>
+                        </div>
+                        <button class="btn btn-primary" onclick="resumeActiveWorkout()">Resume</button>
+                    </div>
+                `;
+            } else {
+                activeHolder.innerHTML = '';
+            }
+
             const container = document.getElementById('recentWorkoutsList');
             if (recent.length === 0) {
                 container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">💪</div><p>No workouts yet. Start your first workout!</p></div>';
@@ -1273,7 +1341,7 @@
             document.getElementById('exerciseType').value = exercise.type;
             document.getElementById('exerciseCategory').value = exercise.category;
             document.getElementById('exerciseWeight').value = exercise.defaultWeight || '';
-            document.getElementById('exerciseModal').classList.add('active');
+            openModal('exerciseModal');
         }
 
         async function deleteExercise(id) {
@@ -1348,7 +1416,7 @@
             document.getElementById('planName').value = plan.name;
             
             renderPlanExercisesList();
-            document.getElementById('planModal').classList.add('active');
+            openModal('planModal');
         }
 
         async function duplicatePlan(id) {
@@ -1412,7 +1480,7 @@
             `;
 
             renderExerciseCheckboxGroups(exercises, 'exerciseCheckboxGroups');
-            document.getElementById('addExerciseSetModal').classList.add('active');
+            openModal('addExerciseSetModal');
         }
 
         function addExerciseSetToPlan() {
@@ -1499,7 +1567,19 @@
                 return;
             }
 
-            container.innerHTML = plans.map(plan => `
+            container.innerHTML = `
+                <div class="card" style="margin-bottom: 12px;">
+                    <div class="card-title" style="margin-bottom: 10px;">New workout</div>
+                    <button class="btn btn-primary" onclick="closeModal('selectPlanModal'); loadPage('workout-plans'); window.history.pushState({type:'page', page:'workout-plans'}, '', '#workout-plans');">
+                        + Create New Plan
+                    </button>
+                    <button class="btn btn-secondary" onclick="startEmptyWorkout()">
+                        Start Empty Workout
+                    </button>
+                </div>
+
+                <div style="margin-bottom:10px;color:var(--text-secondary);font-weight:600;">Or start from a plan:</div>
+            ` + plans.map(plan => `
                 <div class="list-item" style="cursor: pointer;" onclick="startWorkout('${plan.id}')">
                     <div class="list-item-content">
                         <h3>${plan.name}</h3>
@@ -1507,6 +1587,7 @@
                     </div>
                 </div>
             `).join('');
+
         }
 
         async function startEmptyWorkout() {
@@ -1516,12 +1597,13 @@
                 sets: [],
                 currentSetIndex: 0,
                 completedSets: [],
-                startTime: Date.now()
+                startTime: Date.now(),
+                isOngoing: true
             };
 
             closeModal('selectPlanModal');
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-            document.getElementById('active-workout-page').classList.add('active');
+            openModal('active-workout-page');
             closeSidebar();
             
             showInjectExerciseModal();
@@ -1532,6 +1614,9 @@
                 } catch (err) {}
             }
         }
+
+        if (!confirmTerminateIfActive()) return;
+        if (app.currentWorkout && app.currentWorkout.isOngoing) terminateCurrentWorkout();
 
         async function startWorkout(planId) {
             const plan = await app.db.get('workoutPlans', planId);
@@ -1560,12 +1645,13 @@
                 sets: expandedSets,
                 currentSetIndex: 0,
                 completedSets: [],
-                startTime: Date.now()
+                startTime: Date.now(),
+                isOngoing: true
             };
 
             closeModal('selectPlanModal');
             document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-            document.getElementById('active-workout-page').classList.add('active');
+            openModal('active-workout-page');
             closeSidebar();
             
             renderWorkoutCard();
@@ -1575,6 +1661,38 @@
                     await navigator.wakeLock.request('screen');
                 } catch (err) {}
             }
+        }
+
+        async function resumeActiveWorkout() {
+            if (!app.currentWorkout || !app.currentWorkout.isOngoing) return;
+
+            // show workout page
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById('active-workout-page').classList.add('active');
+            app.currentPage = 'active-workout';
+
+            // ensure back from workout returns home
+            window.history.pushState({ type:'page', page:'home' }, '', '#home');
+            window.history.pushState({ type:'page', page:'active-workout' }, '', '#active-workout');
+
+            renderWorkoutCard();
+        }
+
+        function terminateCurrentWorkout() {
+            if (app.restTimer) clearInterval(app.restTimer);
+            app.restTimer = null;
+            app.isResting = false;
+            app.restTimeRemaining = 0;
+
+            app.currentWorkout = null;
+            showToast('Active workout terminated');
+        }
+
+        function confirmTerminateIfActive() {
+            if (app.currentWorkout && app.currentWorkout.isOngoing) {
+                return confirm('A workout is currently active. Terminate it and start a new one?');
+            }
+            return true;
         }
 
         function renderWorkoutCard() {
@@ -1964,7 +2082,7 @@
             `;
 
             renderExerciseCheckboxGroups(exercises, 'injectCheckboxGroups');
-            document.getElementById('injectExerciseModal').classList.add('active');
+            openModal('injectExerciseModal');
         }
 
         function injectExercise() {
