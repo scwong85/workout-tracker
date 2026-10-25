@@ -4,19 +4,102 @@ Native Kotlin + Jetpack Compose rewrite of the web app, following
 [`docs/03-ANDROID-IMPLEMENTATION-PLAN.md`](../docs/03-ANDROID-IMPLEMENTATION-PLAN.md) and the
 redesign in [`docs/02-UX-REDESIGN.md`](../docs/02-UX-REDESIGN.md).
 
-## Build
+## Building the app
 
-Requirements: JDK 17, Android SDK (compileSdk 35). From this directory:
+### Option A — Android Studio (easiest)
+
+1. Install [Android Studio](https://developer.android.com/studio) (Ladybug or newer). It bundles
+   JDK 17+ and installs the Android SDK on first launch.
+2. **File → Open…** and choose the **`android/`** folder (not the repo root).
+3. Let Gradle sync finish. If prompted, install **Android SDK Platform 35**.
+4. Pick a device (a phone with USB debugging, or an emulator from Device Manager) and press **Run ▶**.
+
+### Option B — Command line
+
+**Requirements**
+
+- JDK 17 or newer (`java -version`)
+- Android SDK with **Platform 35** and **Build-Tools 35**. With only the command-line tools:
+  ```bash
+  sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
+  ```
+- Tell Gradle where the SDK is, either by setting `ANDROID_HOME`, or by creating
+  `android/local.properties` (gitignored):
+  ```properties
+  sdk.dir=/path/to/Android/sdk
+  ```
+
+The Gradle wrapper downloads the right Gradle version itself; there's no need to install Gradle.
+
+**Build and install** (from the `android/` directory):
+
+```bash
+cd android
+./gradlew :app:assembleDebug      # APK → app/build/outputs/apk/debug/app-debug.apk
+./gradlew :app:installDebug       # build + install on the connected phone/emulator
+```
+
+Or install a built APK with `adb install -r app/build/outputs/apk/debug/app-debug.apk`.
+On Windows use `gradlew.bat` instead of `./gradlew`.
+
+The debug build installs as **Workout Tracker** with id `com.workouttracker.app.debug`, so it can
+sit alongside a future release build.
+
+**Checks**
 
 ```bash
 ./gradlew :domain:test            # pure-Kotlin logic tests (no Android SDK needed)
 ./gradlew :app:testDebugUnitTest  # app JVM tests
-./gradlew :app:lintDebug
-./gradlew :app:assembleDebug      # → app/build/outputs/apk/debug/
+./gradlew :app:lintDebug          # report → app/build/reports/lint-results-debug.html
 ```
 
-CI (`.github/workflows/android.yml`) runs the same steps but is currently **manual only**
-(Actions → Android CI → Run workflow).
+### Installing on your phone
+
+1. On the phone: **Settings → About phone →** tap **Build number** 7 times to enable Developer options.
+2. **Settings → System → Developer options →** turn on **USB debugging**
+   (or **Wireless debugging** and pair with `adb pair`).
+3. Connect the phone, accept the "Allow USB debugging?" prompt, check `adb devices` lists it,
+   then run `./gradlew :app:installDebug`.
+
+Without a computer: copy `app-debug.apk` to the phone and open it. Android asks you to allow
+"Install unknown apps" for your file manager or browser the first time.
+
+### Building on GitHub instead
+
+The workflow `.github/workflows/android.yml` runs the tests, lint, and a debug build, then
+uploads the APK. It's currently **manual only**: **Actions → Android CI → Run workflow**, choose
+the branch, and when it finishes download the **`workout-tracker-debug-apk`** artifact (a zip
+containing `app-debug.apk`).
+
+### Release build
+
+```bash
+./gradlew :app:assembleRelease    # → app/build/outputs/apk/release/app-release-unsigned.apk
+```
+
+Release builds are shrunk with R8 and are **unsigned**, because no signing config is committed.
+Sign one for side-loading:
+
+```bash
+keytool -genkeypair -v -keystore release.jks -alias workout -keyalg RSA -keysize 2048 -validity 10000
+$ANDROID_HOME/build-tools/35.0.0/zipalign -p 4 app/build/outputs/apk/release/app-release-unsigned.apk aligned.apk
+$ANDROID_HOME/build-tools/35.0.0/apksigner sign --ks release.jks --out workout-tracker.apk aligned.apk
+```
+
+Keep `release.jks` and its password safe and out of git: every update must be signed with the
+same key. For the Play Store, build an App Bundle with `./gradlew :app:bundleRelease` and use
+Play App Signing.
+
+### Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `SDK location not found` | Set `ANDROID_HOME` or create `local.properties` as above |
+| `Unsupported class file major version` / JDK errors | Use JDK 17+; in Android Studio set **Settings → Build Tools → Gradle → Gradle JDK** |
+| `Failed to find target android-35` | `sdkmanager "platforms;android-35"` |
+| `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | An APK signed with a different key is installed; uninstall it first |
+| Gradle runs out of memory | Raise `org.gradle.jvmargs` in `gradle.properties` |
+| No rest alerts with the screen off | Allow notifications for the app; on Android 12+ grant **Alarms & reminders**; on Samsung/Xiaomi exempt the app from battery optimisation |
 
 ## Modules
 
