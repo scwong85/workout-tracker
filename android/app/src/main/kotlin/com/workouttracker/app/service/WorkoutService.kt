@@ -10,7 +10,6 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.workouttracker.app.WorkoutApp
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 /**
@@ -36,7 +35,7 @@ class WorkoutService : LifecycleService() {
         if (!observing) {
             observing = true
             lifecycleScope.launch {
-                container.activeWorkout.state.distinctUntilChanged().collect { w ->
+                container.activeWorkout.state.collect { w ->
                     if (w == null) {
                         ServiceCompat.stopForeground(this@WorkoutService, ServiceCompat.STOP_FOREGROUND_REMOVE)
                         stopSelf()
