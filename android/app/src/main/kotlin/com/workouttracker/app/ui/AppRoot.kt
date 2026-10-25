@@ -38,6 +38,8 @@ import com.workouttracker.app.ui.plans.PlansScreen
 import com.workouttracker.app.ui.player.MiniPlayer
 import com.workouttracker.app.ui.player.PlayerPrefs
 import com.workouttracker.app.ui.player.PlayerScreen
+import com.workouttracker.app.ui.progress.ProgressScreen
+import com.workouttracker.app.ui.progress.SessionDetailScreen
 import com.workouttracker.app.ui.components.Messenger
 
 @Composable
@@ -116,7 +118,20 @@ fun AppRoot(openPlayerSignal: Int = 0) {
                         onDone = { navController.popBackStack() },
                     )
                 }
-                composable(Routes.PROGRESS) { Placeholder("Progress") }
+                composable(Routes.PROGRESS) {
+                    ProgressScreen(
+                        onOpenSession = { navController.navigate(Routes.sessionDetail(it)) },
+                        onOpenExercise = { navController.navigate(Routes.exerciseDetail(it)) },
+                    )
+                }
+                composable(Routes.SESSION_DETAIL) { entry ->
+                    SessionDetailScreen(
+                        sessionId = entry.arguments?.getString("sessionId").orEmpty(),
+                        onBack = { navController.popBackStack() },
+                        onRepeatPlan = launcher::startPlan,
+                        onRepeatAdHoc = launcher::startAdHoc,
+                    )
+                }
                 composable(Routes.LIBRARY) {
                     LibraryScreen(
                         onOpenExercise = { navController.navigate(Routes.exerciseDetail(it)) },
@@ -128,6 +143,7 @@ fun AppRoot(openPlayerSignal: Int = 0) {
                         exerciseId = entry.arguments?.getString("exerciseId").orEmpty(),
                         onBack = { navController.popBackStack() },
                         onEdit = { navController.navigate(Routes.exerciseEdit(it)) },
+                        onOpenSession = { navController.navigate(Routes.sessionDetail(it)) },
                     )
                 }
                 composable(Routes.EXERCISE_EDIT) { entry ->

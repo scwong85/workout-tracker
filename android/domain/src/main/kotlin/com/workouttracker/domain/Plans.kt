@@ -143,3 +143,33 @@ object PlanUpdates {
         return plan.copy(groups = groups)
     }
 }
+
+object SessionPlans {
+    /** Rebuilds plan groups from logged sets (for "Repeat this workout"); skipped sets are left out. */
+    fun groupsFrom(
+        sets: List<SessionSet>,
+        categories: Map<String, Category>,
+        restSec: Int = PlanDefaults.REST_SEC,
+        newId: () -> String = Ids::new,
+    ): List<PlanGroup> =
+        sets.filter { it.outcome == SetOutcome.DONE }.groupBy { it.groupOrdinal }.toSortedMap().map { (_, entries) ->
+            PlanGroup(
+                id = newId(),
+                restAfterSec = restSec,
+                items = entries.groupBy { it.exerciseId }.map { (exerciseId, done) ->
+                    val last = done.last()
+                    PlanItem(
+                        id = newId(),
+                        exerciseId = exerciseId,
+                        exerciseName = last.exerciseName,
+                        type = last.type,
+                        category = categories[exerciseId] ?: Category.FULL_BODY,
+                        sets = done.size,
+                        reps = done.maxOf { it.actualReps }.coerceAtLeast(1),
+                        durationSec = done.maxOf { it.actualDurationSec }.coerceAtLeast(1),
+                        weightKg = done.maxOf { it.weightKg },
+                    )
+                },
+            )
+        }
+}

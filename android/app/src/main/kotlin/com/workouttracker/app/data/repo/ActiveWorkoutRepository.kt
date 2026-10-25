@@ -5,6 +5,7 @@ import com.workouttracker.app.data.db.AppDatabase
 import com.workouttracker.domain.ActiveWorkout
 import com.workouttracker.domain.Phase
 import com.workouttracker.domain.Plan
+import com.workouttracker.domain.PlanGroup
 import com.workouttracker.domain.Session
 import com.workouttracker.domain.SetOutcome
 import com.workouttracker.domain.WorkoutEngine
@@ -99,6 +100,14 @@ class ActiveWorkoutRepository(
     suspend fun start(plan: Plan) {
         awaitLoaded()
         mutex.withLock { persist(WorkoutEngine.start(plan, clock())) }
+    }
+
+    /** Starts from groups that aren't a saved plan (e.g. repeating a past session). */
+    suspend fun startAdHoc(name: String, groups: List<PlanGroup>) {
+        awaitLoaded()
+        mutex.withLock {
+            persist(WorkoutEngine.start(Plan(id = "", name = name, groups = groups), clock()).copy(planId = null))
+        }
     }
 
     suspend fun startEmpty() {

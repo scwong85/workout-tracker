@@ -9,6 +9,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.workouttracker.app.AppContainer
 import com.workouttracker.domain.Plan
+import com.workouttracker.domain.PlanGroup
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -20,6 +21,7 @@ class WorkoutLauncher(
 ) {
     sealed interface Request {
         data class FromPlan(val plan: Plan) : Request
+        data class AdHoc(val name: String, val groups: List<PlanGroup>) : Request
         data object Quick : Request
     }
 
@@ -28,6 +30,7 @@ class WorkoutLauncher(
 
     fun startPlan(plan: Plan) = request(Request.FromPlan(plan))
     fun startQuick() = request(Request.Quick)
+    fun startAdHoc(name: String, groups: List<PlanGroup>) = request(Request.AdHoc(name, groups))
     fun resume() = openPlayer()
 
     private fun request(r: Request) {
@@ -48,6 +51,7 @@ class WorkoutLauncher(
         scope.launch {
             when (r) {
                 is Request.FromPlan -> container.activeWorkout.start(r.plan)
+                is Request.AdHoc -> container.activeWorkout.startAdHoc(r.name, r.groups)
                 Request.Quick -> container.activeWorkout.startEmpty()
             }
             openPlayer()

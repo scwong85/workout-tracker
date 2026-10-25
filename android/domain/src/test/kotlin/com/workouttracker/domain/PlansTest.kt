@@ -66,3 +66,21 @@ class PlansTest {
         assertEquals("Push (copy)", copy.name)
     }
 }
+
+class SessionPlansTest {
+    @Test fun groupsFromKeepsSupersetsAndDropsSkips() {
+        fun s(ex: String, group: Int, reps: Int, outcome: SetOutcome = SetOutcome.DONE) = SessionSet(
+            id = ex + reps, exerciseId = ex, exerciseName = ex, type = ExerciseType.REPS, groupOrdinal = group, setOrdinal = 1,
+            targetReps = reps, actualReps = reps, targetDurationSec = 0, actualDurationSec = 0, weightKg = 0.0, outcome = outcome, completedAt = 0,
+        )
+        val groups = SessionPlans.groupsFrom(
+            listOf(s("A", 0, 10), s("B", 0, 8), s("A", 0, 12), s("C", 1, 5, SetOutcome.SKIPPED)),
+            categories = mapOf("A" to Category.CHEST),
+        )
+        assertEquals(1, groups.size)
+        assertEquals(listOf("A", "B"), groups[0].items.map { it.exerciseId })
+        assertEquals(2, groups[0].items[0].sets)
+        assertEquals(12, groups[0].items[0].reps)
+        assertEquals(Category.CHEST, groups[0].items[0].category)
+    }
+}

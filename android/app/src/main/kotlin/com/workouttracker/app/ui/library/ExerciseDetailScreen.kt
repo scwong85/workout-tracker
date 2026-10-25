@@ -42,6 +42,8 @@ import com.workouttracker.app.ui.components.CategoryAvatar
 import com.workouttracker.app.ui.components.LocalMessenger
 import com.workouttracker.domain.Exercise
 import com.workouttracker.domain.ExerciseType
+import com.workouttracker.domain.Session
+import com.workouttracker.domain.WeightUnit
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -52,6 +54,12 @@ class ExerciseDetailViewModel(private val container: AppContainer, val exerciseI
     val exercise: StateFlow<Exercise?> = container.exercises.observeAll()
         .map { list -> list.firstOrNull { it.id == exerciseId } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    val sessions: StateFlow<List<Session>> = container.sessions.observeAll()
+        .map { list -> list.filter { s -> s.sets.any { it.exerciseId == exerciseId } } }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val weightUnit: WeightUnit get() = container.settings.settings.value.weightUnit
 
     suspend fun plansUsing(): List<String> = container.exercises.planNamesUsing(exerciseId)
 
@@ -67,10 +75,11 @@ fun ExerciseDetailScreen(
     exerciseId: String,
     onBack: () -> Unit,
     onEdit: (String) -> Unit,
-    stats: @Composable (Exercise) -> Unit = {},
+    onOpenSession: (String) -> Unit = {},
 ) {
     val vm = appViewModel(key = "detail-$exerciseId") { ExerciseDetailViewModel(it, exerciseId) }
     val exercise by vm.exercise.collectAsStateWithLifecycle()
+    val sessions by vm.sessions.collectAsStateWithLifecycle()
     val messenger = LocalMessenger.current
     val scope = rememberCoroutineScope()
     var confirmPlans by remember { mutableStateOf<List<String>?>(null) }
@@ -127,7 +136,7 @@ fun ExerciseDetailScreen(
             if (ex.notes.isNotBlank()) {
                 Text(ex.notes, style = MaterialTheme.typography.bodyLarge)
             }
-            stats(ex)
+            ExerciseHistory(ex, sessions, vm.weightUnit, onOpenSession)
         }
     }
 
