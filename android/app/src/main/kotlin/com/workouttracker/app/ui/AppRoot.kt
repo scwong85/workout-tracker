@@ -104,6 +104,7 @@ fun AppRoot(openPlayerSignal: Int = 0) {
                         onOpenSession = { navController.navigate(Routes.sessionDetail(it)) },
                         onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                         onSeeHistory = { navController.navigateTopLevel(Routes.PROGRESS) },
+                        onRepeat = launcher::startSession,
                     )
                 }
                 composable(Routes.SETTINGS) { SettingsScreen(onBack = { navController.popBackStack() }) }
@@ -133,6 +134,7 @@ fun AppRoot(openPlayerSignal: Int = 0) {
                     ProgressScreen(
                         onOpenSession = { navController.navigate(Routes.sessionDetail(it)) },
                         onOpenExercise = { navController.navigate(Routes.exerciseDetail(it)) },
+                        onRepeat = launcher::startSession,
                     )
                 }
                 composable(Routes.SESSION_DETAIL) { entry ->

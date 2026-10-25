@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.List
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -22,7 +23,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -45,6 +45,9 @@ import com.workouttracker.app.ui.appViewModel
 import com.workouttracker.app.ui.components.CategoryAvatar
 import com.workouttracker.app.ui.components.EmptyState
 import com.workouttracker.app.ui.components.LocalMessenger
+import com.workouttracker.app.ui.components.RowSwipe
+import com.workouttracker.app.ui.components.SwipeRow
+import com.workouttracker.app.ui.theme.WorkoutTheme
 import com.workouttracker.app.ui.components.relativeDay
 import com.workouttracker.domain.Plan
 import com.workouttracker.domain.PlanEstimator
@@ -103,17 +106,32 @@ fun PlansScreen(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            items(list, key = { it.id }) { plan ->
-                PlanCard(
-                    plan = plan,
-                    onClick = { onEditPlan(plan.id) },
-                    onStart = onStartPlan?.let { start -> { start(plan) } },
-                    onDuplicate = { vm.duplicate(plan); messenger.show("Duplicated ${plan.name}") },
-                    onDelete = {
-                        vm.delete(plan)
-                        messenger.undo("Deleted ${plan.name}") { vm.restore(plan) }
-                    },
+            item {
+                Text(
+                    "Swipe a plan right to start it, left to delete it",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            items(list, key = { it.id }) { plan ->
+                fun delete() {
+                    vm.delete(plan)
+                    messenger.undo("Deleted ${plan.name}") { vm.restore(plan) }
+                }
+                SwipeRow(
+                    start = onStartPlan?.takeIf { plan.totalSets > 0 }?.let { start ->
+                        RowSwipe("Start", Icons.Filled.PlayArrow, WorkoutTheme.colors.success, dismiss = false) { start(plan) }
+                    },
+                    end = RowSwipe("Delete", Icons.Outlined.Delete, MaterialTheme.colorScheme.error, dismiss = true) { delete() },
+                    modifier = Modifier.animateItem(),
+                ) {
+                    PlanCard(
+                        plan = plan,
+                        onClick = { onEditPlan(plan.id) },
+                        onDuplicate = { vm.duplicate(plan); messenger.show("Duplicated ${plan.name}") },
+                        onDelete = ::delete,
+                    )
+                }
             }
         }
     }
@@ -123,7 +141,6 @@ fun PlansScreen(
 fun PlanCard(
     plan: Plan,
     onClick: () -> Unit,
-    onStart: (() -> Unit)?,
     onDuplicate: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -142,9 +159,6 @@ fun PlanCard(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                }
-                if (onStart != null) {
-                    FilledTonalIconButton(onClick = onStart) { Icon(Icons.Filled.PlayArrow, contentDescription = "Start ${plan.name}") }
                 }
                 Box {
                     IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, contentDescription = "More options") }

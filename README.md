@@ -42,12 +42,14 @@ troubleshooting, are in [`android/README.md`](android/README.md#building-the-app
 
 ### Features
 
-- **Workout player:** one card per set. Tap **Done/Skip** or swipe (right = done, left = skip,
-  up = add exercise), with **Undo** after each. Timed exercises get a countdown, and supersets
-  show together on one card.
-- **Rest timer:** keeps running with the screen off. The notification shows the countdown with
-  +15s / Skip buttons, and you get sound and vibration when rest ends. Rest can also start the
-  next set automatically.
+- **Swipe-only workout player:** every workout screen is one card you swipe, like the web app.
+  The card follows your finger, tilts, and shows what the swipe will do before you let go.
+  - **Set card:** right = log set, left = skip, up = add an exercise (each with **Undo**).
+  - **Rest card:** right = start the next set, left = +30 s, up = add an exercise.
+  - **Summary card:** right = save the workout, up = add more exercises.
+  Timed exercises get a countdown, and supersets show together on one card.
+- **Swipeable lists:** swipe a plan right to start it or left to delete it; swipe a past workout
+  right to repeat it or left to delete it (with Undo).
 - **Never lose a workout:** progress is saved after every set and survives the app being closed.
 - **Plans:** full-screen editor with reordering, supersets, and per-exercise sets/reps/time/weight
   and rest. Five starter plans are included.

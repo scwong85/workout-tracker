@@ -133,8 +133,13 @@ app/src/main/kotlin/com/workouttracker/app/
   keeps counting even while the CPU sleeps; an exact alarm wakes the app at rest end to alert.
 - **All transitions are pure functions** in `WorkoutEngine`; the repository serialises them with
   a mutex and the UI, notification buttons and alarms all go through the same path.
-- **Gestures accelerate, buttons guarantee**: every swipe on the set card has a visible button,
-  a TalkBack custom action, and an Undo snackbar.
+- **The workout is swipe-only.** One `SwipeDeck` hosts the set, rest and summary cards; there are no
+  Done/Skip/Add buttons. The card follows the finger, tilts, tints and shows a stamp naming the
+  action, and a hint bar lists what each direction does. Every swipe is also exposed as a TalkBack
+  custom action and (for log/skip) offers an Undo snackbar. Only small in-card controls (−/+,
+  timer, rating) are tappable; swipes are recognised anywhere on the deck and read before child
+  views (see `ui/player/SwipeGesture.kt`).
+- **List rows swipe too** (`ui/components/SwipeRow.kt`): plans start/delete, workouts repeat/delete.
 
 ## Milestones
 
@@ -147,12 +152,15 @@ app/src/main/kotlin/com/workouttracker/app/
 | M4 | Progress overview (KPIs + deltas, charts, muscle split, PRs), history calendar, session detail, exercise insights | ✅ code complete |
 | M5 | Today dashboard, settings, backup/restore, web-app import, starter plans, onboarding | ✅ code complete |
 | M6 | Hardening: review pass, mapper tests, service start race fix, docs | ✅ partial — see below |
+| — | Swipe-only redesign of the player and list rows | ✅ code complete |
 
 ### How M2–M6 were verified
 
 CI was switched to manual after M1, and the development container can't download the Android
 SDK, so the Android build itself has **not** been run since M1. What was checked instead:
 
+- `SwipeDeck` gestures — 10 simulated-touch tests (fast swipes, swipes starting on a button, taps,
+  repeated swipes, card replacement) pass on desktop Compose; `SwipeLogic` has 8 JVM unit tests.
 - `:domain` — 45 unit tests, all passing (engine transitions, the web app's defects as regression
   tests, stats, progress, backup/import with a fixture shaped like the web export).
 - All UI and data code type-checked against the real Compose 1.7 / Material 3 1.3 APIs (desktop

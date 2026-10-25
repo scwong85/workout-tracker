@@ -10,6 +10,7 @@ import androidx.compose.runtime.setValue
 import com.workouttracker.app.AppContainer
 import com.workouttracker.domain.Plan
 import com.workouttracker.domain.PlanGroup
+import com.workouttracker.domain.Session
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -30,6 +31,14 @@ class WorkoutLauncher(
 
     fun startPlan(plan: Plan) = request(Request.FromPlan(plan))
     fun startQuick() = request(Request.Quick)
+
+    /** "Repeat this workout": the saved plan if it still exists, otherwise what was logged. */
+    fun startSession(session: Session) {
+        scope.launch {
+            val (plan, groups) = container.sessions.repeatSource(session)
+            if (plan != null) startPlan(plan) else startAdHoc(session.planName, groups)
+        }
+    }
     fun startAdHoc(name: String, groups: List<PlanGroup>) = request(Request.AdHoc(name, groups))
     fun resume() = openPlayer()
 

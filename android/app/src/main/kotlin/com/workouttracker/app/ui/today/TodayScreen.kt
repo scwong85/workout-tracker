@@ -64,7 +64,7 @@ import com.workouttracker.app.ui.components.CategoryAvatar
 import com.workouttracker.app.ui.components.LocalMessenger
 import com.workouttracker.app.ui.components.SectionHeader
 import com.workouttracker.app.ui.components.relativeDay
-import com.workouttracker.app.ui.progress.SessionRow
+import com.workouttracker.app.ui.progress.SwipeableSessionRow
 import com.workouttracker.domain.BackupFormatException
 import com.workouttracker.domain.ImportData
 import com.workouttracker.domain.Plan
@@ -118,6 +118,9 @@ class TodayViewModel(private val container: AppContainer) : ViewModel() {
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), TodayState())
 
+    fun delete(s: Session) = container.appScope.launch { container.sessions.delete(s.id) }
+    fun restore(s: Session) = container.appScope.launch { container.sessions.save(s) }
+
     fun addTemplates() {
         container.appScope.launch {
             val now = System.currentTimeMillis()
@@ -143,6 +146,7 @@ fun TodayScreen(
     onOpenSession: (String) -> Unit,
     onOpenSettings: () -> Unit,
     onSeeHistory: () -> Unit,
+    onRepeat: (Session) -> Unit,
 ) {
     val vm = appViewModel { TodayViewModel(it) }
     val state by vm.state.collectAsStateWithLifecycle()
@@ -195,7 +199,18 @@ fun TodayScreen(
                 item {
                     SectionHeader("Recent") { TextButton(onClick = onSeeHistory) { Text("All") } }
                 }
-                items(state.recent, key = { it.id }) { s -> SessionRow(s) { onOpenSession(s.id) } }
+                items(state.recent, key = { it.id }) { s ->
+                    SwipeableSessionRow(
+                        s,
+                        onOpen = { onOpenSession(s.id) },
+                        onRepeat = onRepeat,
+                        onDelete = { gone ->
+                            vm.delete(gone)
+                            messenger.undo("Workout deleted") { vm.restore(gone) }
+                        },
+                        modifier = Modifier.animateItem(),
+                    )
+                }
             }
         }
     }

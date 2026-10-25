@@ -17,6 +17,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Replay
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Insights
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -57,7 +59,10 @@ import com.workouttracker.app.ui.components.BarChart
 import com.workouttracker.app.ui.components.CategoryAvatar
 import com.workouttracker.app.ui.components.CategorySplit
 import com.workouttracker.app.ui.components.EmptyState
+import com.workouttracker.app.ui.components.LocalMessenger
+import com.workouttracker.app.ui.components.RowSwipe
 import com.workouttracker.app.ui.components.SectionHeader
+import com.workouttracker.app.ui.components.SwipeRow
 import com.workouttracker.app.ui.components.relativeDay
 import com.workouttracker.app.ui.components.shortDateTime
 import com.workouttracker.app.ui.theme.WorkoutTheme
@@ -75,6 +80,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
@@ -91,7 +97,10 @@ data class ProgressState(
     val weightUnit: WeightUnit = WeightUnit.KG,
 )
 
-class ProgressViewModel(container: AppContainer) : ViewModel() {
+class ProgressViewModel(private val container: AppContainer) : ViewModel() {
+    fun delete(s: Session) = container.appScope.launch { container.sessions.delete(s.id) }
+    fun restore(s: Session) = container.appScope.launch { container.sessions.save(s) }
+
     val range = MutableStateFlow(StatRange.MONTH)
 
     val state: StateFlow<ProgressState> = combine(
@@ -114,10 +123,11 @@ class ProgressViewModel(container: AppContainer) : ViewModel() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProgressScreen(onOpenSession: (String) -> Unit, onOpenExercise: (String) -> Unit) {
+fun ProgressScreen(onOpenSession: (String) -> Unit, onOpenExercise: (String) -> Unit, onRepeat: (Session) -> Unit) {
     val vm = appViewModel { ProgressViewModel(it) }
     val state by vm.state.collectAsStateWithLifecycle()
     val range by vm.range.collectAsStateWithLifecycle()
+    val messenger = LocalMessenger.current
     var tab by rememberSaveable { mutableIntStateOf(0) }
 
     Scaffold(topBar = { TopAppBar(title = { Text("Progress") }) }) { padding ->
@@ -136,7 +146,15 @@ fun ProgressScreen(onOpenSession: (String) -> Unit, onOpenExercise: (String) -> 
             }
             when (tab) {
                 0 -> OverviewTab(state, range, onRange = { vm.range.value = it }, onOpenSession)
-                1 -> HistoryTab(state.sessions, onOpenSession)
+                1 -> HistoryTab(
+                    sessions = state.sessions,
+                    onOpenSession = onOpenSession,
+                    onRepeat = onRepeat,
+                    onDelete = { s ->
+                        vm.delete(s)
+                        messenger.undo("Workout deleted") { vm.restore(s) }
+                    },
+                )
                 else -> ExercisesTab(state, onOpenExercise)
             }
         }
@@ -227,7 +245,7 @@ private fun OverviewCard(title: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun HistoryTab(sessions: List<Session>, onOpenSession: (String) -> Unit) {
+private fun HistoryTab(sessions: List<Session>, onOpenSession: (String) -> Unit, onRepeat: (Session) -> Unit, onDelete: (Session) -> Unit) {
     val zone = ZoneId.systemDefault()
     var month by remember { mutableStateOf(YearMonth.now(zone)) }
     var selectedDay by remember { mutableStateOf<LocalDate?>(null) }
@@ -259,8 +277,35 @@ private fun HistoryTab(sessions: List<Session>, onOpenSession: (String) -> Unit)
         if (visible.isEmpty()) {
             item { Text("No workouts.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(8.dp)) }
         }
-        items(visible, key = { it.id }) { s -> SessionRow(s) { onOpenSession(s.id) } }
+        if (visible.isNotEmpty()) {
+            item {
+                Text(
+                    "Swipe right to repeat a workout, left to delete it",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        items(visible, key = { it.id }) { s ->
+            SwipeableSessionRow(s, onOpen = { onOpenSession(s.id) }, onRepeat = onRepeat, onDelete = onDelete, modifier = Modifier.animateItem())
+        }
     }
+}
+
+/** A workout row: swipe right to repeat it, left to delete it (the caller offers Undo). */
+@Composable
+fun SwipeableSessionRow(
+    s: Session,
+    onOpen: () -> Unit,
+    onRepeat: (Session) -> Unit,
+    onDelete: (Session) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SwipeRow(
+        start = RowSwipe("Repeat", Icons.Filled.Replay, WorkoutTheme.colors.success, dismiss = false) { onRepeat(s) },
+        end = RowSwipe("Delete", Icons.Outlined.Delete, MaterialTheme.colorScheme.error, dismiss = true) { onDelete(s) },
+        modifier = modifier,
+    ) { SessionRow(s, onOpen) }
 }
 
 @Composable

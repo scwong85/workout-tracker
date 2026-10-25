@@ -46,7 +46,6 @@ import com.workouttracker.domain.Format
 import com.workouttracker.domain.Plan
 import com.workouttracker.domain.PlanGroup
 import com.workouttracker.domain.Session
-import com.workouttracker.domain.SessionPlans
 import com.workouttracker.domain.SessionSet
 import com.workouttracker.domain.SessionStatus
 import com.workouttracker.domain.SetOutcome
@@ -54,7 +53,6 @@ import com.workouttracker.domain.Stats
 import com.workouttracker.domain.WeightUnit
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -67,13 +65,7 @@ class SessionDetailViewModel(private val container: AppContainer, sessionId: Str
     fun delete(s: Session) = container.appScope.launch { container.sessions.delete(s.id) }
     fun restore(s: Session) = container.appScope.launch { container.sessions.save(s) }
 
-    /** The saved plan if it still exists, otherwise groups rebuilt from what was logged. */
-    suspend fun repeatSource(s: Session): Pair<Plan?, List<PlanGroup>> {
-        val plan = s.planId?.let { container.plans.get(it) }
-        if (plan != null) return plan to plan.groups
-        val categories = container.exercises.observeAll().first().associate { it.id to it.category }
-        return null to SessionPlans.groupsFrom(s.sets, categories)
-    }
+    suspend fun repeatSource(s: Session): Pair<Plan?, List<PlanGroup>> = container.sessions.repeatSource(s)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
