@@ -56,6 +56,7 @@ fun ExercisePickerSheet(
     onConfirm: (selected: List<Exercise>, asSuperset: Boolean) -> Unit,
     title: String = "Add exercises",
     subtitleFor: (Exercise) -> String? = { null },
+    footer: (@Composable () -> Unit)? = null,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var query by rememberSaveable { mutableStateOf("") }
@@ -114,6 +115,9 @@ fun ExercisePickerSheet(
                 }
             }
             HorizontalDivider()
+            if (footer != null && selected.isNotEmpty()) {
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) { footer() }
+            }
             Surface(tonalElevation = 2.dp) {
                 Row(
                     Modifier.fillMaxWidth().padding(16.dp).navigationBarsPadding(),

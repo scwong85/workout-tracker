@@ -20,6 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
@@ -33,6 +34,8 @@ import com.workouttracker.app.ui.library.ExerciseEditScreen
 import com.workouttracker.app.ui.library.LibraryScreen
 import com.workouttracker.app.ui.plans.PlanEditorScreen
 import com.workouttracker.app.ui.plans.PlansScreen
+import com.workouttracker.app.ui.player.MiniPlayer
+import com.workouttracker.app.ui.player.PlayerScreen
 import com.workouttracker.app.ui.components.Messenger
 
 @Composable
@@ -44,6 +47,11 @@ fun AppRoot() {
     val backStack by navController.currentBackStackEntryAsState()
     val destination = backStack?.destination
     val showBottomBar = TopLevel.entries.any { top -> destination?.hierarchy?.any { it.route == top.route } == true }
+    val container = appContainer()
+    val activeWorkout by container.activeWorkout.state.collectAsStateWithLifecycle()
+    val launcher = remember {
+        WorkoutLauncher(container, uiScope) { navController.navigate(Routes.PLAYER) { launchSingleTop = true } }
+    }
 
     CompositionLocalProvider(LocalMessenger provides messenger) {
         Scaffold(
@@ -53,6 +61,7 @@ fun AppRoot() {
             bottomBar = {
                 if (showBottomBar) {
                     Column {
+                        activeWorkout?.let { MiniPlayer(it, onResume = launcher::resume) }
                         NavigationBar {
                             TopLevel.entries.forEach { top ->
                                 val selected = destination?.hierarchy?.any { it.route == top.route } == true
@@ -68,6 +77,7 @@ fun AppRoot() {
                 }
             },
         ) { padding ->
+            WorkoutConflictDialog(launcher)
             NavHost(
                 navController = navController,
                 startDestination = Routes.TODAY,
@@ -78,6 +88,13 @@ fun AppRoot() {
                     PlansScreen(
                         onEditPlan = { navController.navigate(Routes.planEdit(it)) },
                         onCreatePlan = { navController.navigate(Routes.planEdit()) },
+                        onStartPlan = launcher::startPlan,
+                    )
+                }
+                composable(Routes.PLAYER) {
+                    PlayerScreen(
+                        onClose = { navController.popBackStack(Routes.PLAYER, inclusive = true) },
+                        onSaved = { navController.popBackStack(Routes.PLAYER, inclusive = true) },
                     )
                 }
                 composable(Routes.PLAN_EDIT) { entry ->

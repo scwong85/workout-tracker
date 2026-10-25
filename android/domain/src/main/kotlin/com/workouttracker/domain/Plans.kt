@@ -120,3 +120,26 @@ object PlanEdits {
         groups = plan.groups.map { g -> g.copy(id = Ids.new(), items = g.items.map { it.copy(id = Ids.new()) }) },
     )
 }
+
+object PlanUpdates {
+    /**
+     * "Update plan with today's numbers": each plan item takes the best set the user actually did
+     * for it. Cards added mid-workout (group ordinals beyond the plan) are ignored.
+     */
+    fun applyActuals(plan: Plan, log: List<SessionSet>): Plan {
+        val done = log.filter { it.outcome == SetOutcome.DONE }
+        val groups = plan.groups.mapIndexed { gi, group ->
+            group.copy(
+                items = group.items.map { item ->
+                    val sets = done.filter { it.groupOrdinal == gi && it.exerciseId == item.exerciseId }
+                    if (sets.isEmpty()) item else item.copy(
+                        reps = if (item.type == ExerciseType.REPS) sets.maxOf { it.actualReps }.coerceAtLeast(1) else item.reps,
+                        durationSec = if (item.type == ExerciseType.DURATION) sets.maxOf { it.actualDurationSec }.coerceAtLeast(1) else item.durationSec,
+                        weightKg = sets.maxOf { it.weightKg },
+                    )
+                },
+            )
+        }
+        return plan.copy(groups = groups)
+    }
+}
