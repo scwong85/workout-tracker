@@ -15,6 +15,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -35,11 +36,12 @@ import com.workouttracker.app.ui.library.LibraryScreen
 import com.workouttracker.app.ui.plans.PlanEditorScreen
 import com.workouttracker.app.ui.plans.PlansScreen
 import com.workouttracker.app.ui.player.MiniPlayer
+import com.workouttracker.app.ui.player.PlayerPrefs
 import com.workouttracker.app.ui.player.PlayerScreen
 import com.workouttracker.app.ui.components.Messenger
 
 @Composable
-fun AppRoot() {
+fun AppRoot(openPlayerSignal: Int = 0) {
     val navController = rememberNavController()
     val snackbar = remember { SnackbarHostState() }
     val uiScope = rememberCoroutineScope()
@@ -49,8 +51,18 @@ fun AppRoot() {
     val showBottomBar = TopLevel.entries.any { top -> destination?.hierarchy?.any { it.route == top.route } == true }
     val container = appContainer()
     val activeWorkout by container.activeWorkout.state.collectAsStateWithLifecycle()
+    val settings by container.settings.settings.collectAsStateWithLifecycle()
+    val playerPrefs = PlayerPrefs(
+        weightUnit = settings.weightUnit,
+        keepScreenOn = settings.keepScreenOn,
+        defaultRestSec = settings.defaultRestSec,
+    )
     val launcher = remember {
         WorkoutLauncher(container, uiScope) { navController.navigate(Routes.PLAYER) { launchSingleTop = true } }
+    }
+    val playerLoaded by container.activeWorkout.isLoaded.collectAsStateWithLifecycle()
+    LaunchedEffect(openPlayerSignal, playerLoaded) {
+        if (openPlayerSignal > 0 && playerLoaded && container.activeWorkout.state.value != null) launcher.resume()
     }
 
     CompositionLocalProvider(LocalMessenger provides messenger) {
@@ -93,6 +105,7 @@ fun AppRoot() {
                 }
                 composable(Routes.PLAYER) {
                     PlayerScreen(
+                        prefs = playerPrefs,
                         onClose = { navController.popBackStack(Routes.PLAYER, inclusive = true) },
                         onSaved = { navController.popBackStack(Routes.PLAYER, inclusive = true) },
                     )

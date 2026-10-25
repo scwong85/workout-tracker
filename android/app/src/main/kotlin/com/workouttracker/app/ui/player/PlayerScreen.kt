@@ -1,6 +1,10 @@
 package com.workouttracker.app.ui.player
 
+import android.Manifest
+import android.os.Build
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -51,10 +55,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.workouttracker.app.service.WorkoutNotifications
+import com.workouttracker.app.ui.appContainer
 import com.workouttracker.app.ui.appViewModel
 import com.workouttracker.app.ui.components.EmptyState
 import com.workouttracker.app.ui.components.ExercisePickerSheet
@@ -112,6 +119,19 @@ fun PlayerScreen(
         DisposableEffect(view) {
             view.keepScreenOn = true
             onDispose { view.keepScreenOn = false }
+        }
+    }
+
+    // Ask for notifications in context, the first time a workout is opened (Android 13+).
+    val container = appContainer()
+    val context = LocalContext.current
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        container.appScope.launch { container.settings.setAskedNotifications() }
+        container.background.ensureServiceRunning()
+    }
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= 33 && !container.settings.settings.value.askedNotifications && !WorkoutNotifications.canPost(context)) {
+            permission.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 

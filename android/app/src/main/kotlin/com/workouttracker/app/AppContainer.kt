@@ -7,6 +7,8 @@ import com.workouttracker.app.data.repo.ActiveWorkoutRepository
 import com.workouttracker.app.data.repo.ExerciseRepository
 import com.workouttracker.app.data.repo.PlanRepository
 import com.workouttracker.app.data.repo.SessionRepository
+import com.workouttracker.app.data.repo.SettingsRepository
+import com.workouttracker.app.service.WorkoutBackground
 import com.workouttracker.domain.Presets
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,8 +24,11 @@ class AppContainer(context: Context) {
     val plans = PlanRepository(database)
     val sessions = SessionRepository(database)
     val activeWorkout = ActiveWorkoutRepository(database, sessions, plans, appScope)
+    val settings = SettingsRepository(appContext, appScope)
+    val background = WorkoutBackground(appContext, activeWorkout, settings, appScope)
 
     fun start() {
+        background.start()
         appScope.launch {
             // Idempotent: presets added in later app versions get inserted, existing rows are untouched.
             database.exerciseDao().insertIgnore(Presets.exercises.map { it.toEntity() })
