@@ -198,9 +198,10 @@ fun PlayerScreen(
                     next = current,
                     onAdjust = vm::adjustRest,
                     onSkip = vm::skipRest,
+                    onAdd = { showPicker = true },
                 )
                 phase is Phase.Performing && current != null -> Column(Modifier.fillMaxSize()) {
-                    Box(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
+                    Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
                         SwipeCard(
                             cardKey = current.id,
                             onDone = {
@@ -224,6 +225,12 @@ fun PlayerScreen(
                                 onStopHold = vm::complete,
                             )
                         }
+                        Text(
+                            "Swipe right to log · left to skip · up to add",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 12.dp),
+                        )
                     }
                     UpNextRow(w, onClick = { showQueue = true })
                     ActionBar(

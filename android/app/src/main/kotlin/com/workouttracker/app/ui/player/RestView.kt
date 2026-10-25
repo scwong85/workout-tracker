@@ -16,11 +16,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.workouttracker.app.ui.theme.WorkoutTheme
 import com.workouttracker.domain.Format
 import com.workouttracker.domain.Phase
 import com.workouttracker.domain.QueuedSet
+import kotlin.math.abs
 
 @Composable
 fun RestView(
@@ -29,13 +31,29 @@ fun RestView(
     next: QueuedSet?,
     onAdjust: (Int) -> Unit,
     onSkip: () -> Unit,
+    onAdd: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val density = LocalDensity.current
     val total = (rest.endsAt - rest.startedAt).coerceAtLeast(1)
     val remaining = (rest.endsAt - now).coerceAtLeast(0)
     val over = remaining == 0L
     Column(
-        modifier.fillMaxSize().padding(24.dp),
+        modifier
+            .fillMaxSize()
+            // Same shortcuts as the web app's rest card: swipe right = end rest, up = add exercise.
+            .swipeGesture(
+                key = Unit,
+                onEnd = { drag, size ->
+                    val upThreshold = with(density) { 120.dp.toPx() }
+                    // 30% of the width, matching the set card and the web app.
+                    when {
+                        drag.x > size.width * 0.3f && abs(drag.x) > abs(drag.y) -> onSkip()
+                        drag.y < -upThreshold && abs(drag.y) > abs(drag.x) -> onAdd()
+                    }
+                },
+            )
+            .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -67,6 +85,12 @@ fun RestView(
             colors = ButtonDefaults.buttonColors(containerColor = WorkoutTheme.colors.rest, contentColor = WorkoutTheme.colors.onRest),
             modifier = Modifier.fillMaxWidth().height(56.dp),
         ) { Text(if (over) "Start next set" else "Skip rest") }
+        Text(
+            "Swipe right to skip rest · up to add an exercise",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 12.dp),
+        )
     }
 }
 

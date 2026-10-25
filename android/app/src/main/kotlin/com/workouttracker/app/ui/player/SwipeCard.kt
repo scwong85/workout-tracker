@@ -5,7 +5,6 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Card
@@ -24,7 +23,6 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -114,27 +112,25 @@ fun SwipeCard(
             shape = MaterialTheme.shapes.extraLarge,
             modifier = Modifier
                 .fillMaxWidth()
-                .offset { IntOffset(o.x.roundToInt(), o.y.roundToInt()) }
+                // Gestures go first so their coordinate space doesn't move with the card.
+                .swipeGesture(
+                    key = cardKey,
+                    onDrag = { total ->
+                        scope.launch { offset.snapTo(total) }
+                        val action = actionFor(total)
+                        if (action != armed) {
+                            armed = action
+                            if (action != null) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        }
+                    },
+                    onEnd = { total, _ -> settle(actionFor(total)) },
+                    onCancel = { settle(null) },
+                )
+                .offset { IntOffset(offset.value.x.roundToInt(), offset.value.y.roundToInt()) }
                 .graphicsLayer {
-                    rotationZ = (o.x / width) * 10f
+                    rotationZ = (offset.value.x / width) * 10f
                     scaleX = scale.value
                     scaleY = scale.value
-                }
-                .pointerInput(cardKey) {
-                    detectDragGestures(
-                        onDragEnd = { settle(actionFor(offset.value)) },
-                        onDragCancel = { settle(null) },
-                        onDrag = { change, drag ->
-                            change.consume()
-                            val next = offset.value + drag
-                            scope.launch { offset.snapTo(next) }
-                            val action = actionFor(next)
-                            if (action != armed) {
-                                armed = action
-                                if (action != null) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            }
-                        },
-                    )
                 }
                 .semantics {
                     customActions = listOf(
