@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -21,7 +22,6 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -53,6 +53,11 @@ import com.workouttracker.domain.WeightUnit
 /** "Last time" cue for an exercise, e.g. "Last time: 10 reps @ 20 kg". Supplied by the progress layer. */
 typealias LastTimeLookup = (QueuedExercise) -> String?
 
+/**
+ * Contents of the set card. There is deliberately no scrolling and no Done/Skip buttons: the
+ * whole card is swiped, and only the −/+ and timer controls inside it are tappable. Layout
+ * shrinks with the number of exercises so even a four-exercise superset fits one screen.
+ */
 @Composable
 fun SetContent(
     set: QueuedSet,
@@ -63,35 +68,55 @@ fun SetContent(
     onAdjust: (index: Int, field: AdjustField, delta: Double) -> Unit,
     onStartHold: () -> Unit,
     onStopHold: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        val label = if (set.exercises.size > 1) {
+    val count = set.exercises.size
+    val dense = count >= 3
+    Column(
+        modifier.fillMaxSize().padding(horizontal = 20.dp, vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        val label = if (count > 1) {
             "SUPERSET · ROUND ${set.setOrdinal} OF ${set.totalSetsInGroup}"
         } else {
             "${set.exercises.first().category.label.uppercase()} · SET ${set.setOrdinal} OF ${set.totalSetsInGroup}"
         }
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(if (dense) 4.dp else 8.dp))
         set.exercises.forEachIndexed { index, ex ->
-            if (index > 0) HorizontalDivider(Modifier.padding(vertical = 12.dp))
-            ExerciseBlock(
-                ex = ex,
-                compact = set.exercises.size > 1,
-                phase = phase,
-                now = now,
-                weightUnit = weightUnit,
-                lastTime = lastTime(ex),
-                onAdjust = { field, delta -> onAdjust(index, field, delta) },
-                onStartHold = onStartHold,
-                onStopHold = onStopHold,
-            )
+            if (index > 0) HorizontalDivider(Modifier.padding(vertical = if (dense) 4.dp else 10.dp))
+            val adjust = { field: AdjustField, delta: Double -> onAdjust(index, field, delta) }
+            if (dense) {
+                DenseBlock(ex, weightUnit, adjust)
+            } else {
+                FullBlock(
+                    ex = ex,
+                    compact = count > 1,
+                    // A lone timed exercise swaps its stepper for the countdown ring while running.
+                    inlineTimer = count == 1,
+                    phase = phase,
+                    now = now,
+                    weightUnit = weightUnit,
+                    lastTime = lastTime(ex),
+                    onAdjust = adjust,
+                    onStartHold = onStartHold,
+                    onStopHold = onStopHold,
+                )
+            }
+        }
+        if (count > 1 && set.exercises.any { it.type == ExerciseType.DURATION }) {
+            Spacer(Modifier.height(8.dp))
+            HoldControls(phase, now, ringSize = if (dense) 96.dp else 120.dp, onStartHold, onStopHold)
         }
     }
 }
 
 @Composable
-private fun ExerciseBlock(
+private fun FullBlock(
     ex: QueuedExercise,
     compact: Boolean,
+    inlineTimer: Boolean,
     phase: Phase.Performing,
     now: Long,
     weightUnit: WeightUnit,
@@ -101,7 +126,7 @@ private fun ExerciseBlock(
     onStopHold: () -> Unit,
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
             CategoryAvatar(ex.category, size = 28.dp)
             Spacer(Modifier.width(8.dp))
             Text(
@@ -111,7 +136,7 @@ private fun ExerciseBlock(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(4.dp))
         when (ex.type) {
             ExerciseType.REPS -> BigStepper(
                 value = ex.actualReps.toString(),
@@ -122,24 +147,8 @@ private fun ExerciseBlock(
                 onPlus = { onAdjust(AdjustField.REPS, 1.0) },
             )
             ExerciseType.DURATION -> {
-                // Locals: smart casts don't work on properties declared in another module.
-                val endsAt = phase.holdEndsAt
-                val startedAt = phase.holdStartedAt
-                if (endsAt != null && startedAt != null) {
-                    val total = (endsAt - startedAt).coerceAtLeast(1)
-                    val remaining = (endsAt - now).coerceAtLeast(0)
-                    CountdownRing(
-                        fraction = remaining.toFloat() / total,
-                        text = Format.clockCeil(remaining),
-                        color = MaterialTheme.colorScheme.primary,
-                        size = if (compact) 140.dp else 200.dp,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    FilledTonalButton(onClick = onStopHold) {
-                        Icon(Icons.Filled.Stop, contentDescription = null)
-                        Spacer(Modifier.width(6.dp))
-                        Text("Stop timer")
-                    }
+                if (inlineTimer && phase.holdEndsAt != null && phase.holdStartedAt != null) {
+                    HoldControls(phase, now, ringSize = 200.dp, onStartHold, onStopHold)
                 } else {
                     BigStepper(
                         value = Format.clock(ex.actualDurationSec),
@@ -149,11 +158,9 @@ private fun ExerciseBlock(
                         onMinus = { onAdjust(AdjustField.DURATION, -5.0) },
                         onPlus = { onAdjust(AdjustField.DURATION, 5.0) },
                     )
-                    Spacer(Modifier.height(8.dp))
-                    FilledTonalButton(onClick = onStartHold) {
-                        Icon(Icons.Filled.PlayArrow, contentDescription = null)
-                        Spacer(Modifier.width(6.dp))
-                        Text("Start timer")
+                    if (inlineTimer) {
+                        Spacer(Modifier.height(4.dp))
+                        HoldControls(phase, now, ringSize = 200.dp, onStartHold, onStopHold)
                     }
                 }
             }
@@ -164,8 +171,70 @@ private fun ExerciseBlock(
                 lastTime,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp),
+                modifier = Modifier.padding(top = 2.dp),
             )
+        }
+    }
+}
+
+/** One row per exercise, for supersets of three or more. */
+@Composable
+private fun DenseBlock(ex: QueuedExercise, weightUnit: WeightUnit, onAdjust: (AdjustField, Double) -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        CategoryAvatar(ex.category, size = 28.dp)
+        Spacer(Modifier.width(8.dp))
+        Column(Modifier.weight(1f)) {
+            Text(ex.exerciseName, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (ex.weightKg > 0) {
+                Text(Format.weight(ex.weightKg, weightUnit), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        val (value, field, step) = when (ex.type) {
+            ExerciseType.REPS -> Triple("${ex.actualReps}", AdjustField.REPS, 1.0)
+            ExerciseType.DURATION -> Triple(Format.clock(ex.actualDurationSec), AdjustField.DURATION, 5.0)
+        }
+        IconButton(onClick = { onAdjust(field, -step) }, modifier = Modifier.size(44.dp)) {
+            Icon(Icons.Filled.Remove, contentDescription = "Decrease ${ex.exerciseName}")
+        }
+        Text(
+            value,
+            style = MaterialTheme.typography.titleLarge,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            modifier = Modifier.width(64.dp).semantics { contentDescription = "${ex.exerciseName}: $value" },
+        )
+        IconButton(onClick = { onAdjust(field, step) }, modifier = Modifier.size(44.dp)) {
+            Icon(Icons.Filled.Add, contentDescription = "Increase ${ex.exerciseName}")
+        }
+    }
+}
+
+@Composable
+private fun HoldControls(phase: Phase.Performing, now: Long, ringSize: Dp, onStart: () -> Unit, onStop: () -> Unit) {
+    // Locals: smart casts don't work on properties declared in another module.
+    val endsAt = phase.holdEndsAt
+    val startedAt = phase.holdStartedAt
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        if (endsAt != null && startedAt != null) {
+            val total = (endsAt - startedAt).coerceAtLeast(1)
+            val remaining = (endsAt - now).coerceAtLeast(0)
+            CountdownRing(
+                fraction = remaining.toFloat() / total,
+                text = Format.clockCeil(remaining),
+                color = MaterialTheme.colorScheme.primary,
+                size = ringSize,
+            )
+            FilledTonalButton(onClick = onStop) {
+                Icon(Icons.Filled.Stop, contentDescription = null)
+                Spacer(Modifier.width(6.dp))
+                Text("Stop timer")
+            }
+        } else {
+            FilledTonalButton(onClick = onStart) {
+                Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                Spacer(Modifier.width(6.dp))
+                Text("Start timer")
+            }
         }
     }
 }
@@ -199,12 +268,10 @@ private fun BigStepper(value: String, unit: String, compact: Boolean, label: Str
 @Composable
 private fun WeightRow(weightKg: Double, unit: WeightUnit, onAdjust: (AdjustField, Double) -> Unit) {
     val step = Units.fromDisplay(Units.step(unit), unit)
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
-        IconButton(
-            onClick = { onAdjust(AdjustField.WEIGHT, -step) },
-            enabled = weightKg > 0,
-            colors = IconButtonDefaults.iconButtonColors(),
-        ) { Icon(Icons.Filled.Remove, contentDescription = "Decrease weight") }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+        IconButton(onClick = { onAdjust(AdjustField.WEIGHT, -step) }, enabled = weightKg > 0) {
+            Icon(Icons.Filled.Remove, contentDescription = "Decrease weight")
+        }
         Text(
             if (weightKg > 0) Format.weight(weightKg, unit) else "Bodyweight",
             style = MaterialTheme.typography.titleMedium,
@@ -221,7 +288,7 @@ fun CountdownRing(fraction: Float, text: String, color: Color, size: Dp, modifie
     val track = MaterialTheme.colorScheme.surfaceContainerHighest
     Box(modifier.size(size), contentAlignment = Alignment.Center) {
         Canvas(Modifier.size(size)) {
-            val stroke = 14.dp.toPx()
+            val stroke = (size.toPx() * 0.07f).coerceIn(6.dp.toPx(), 14.dp.toPx())
             val inset = stroke / 2
             val arcSize = Size(this.size.width - stroke, this.size.height - stroke)
             drawArc(track, 0f, 360f, useCenter = false, topLeft = Offset(inset, inset), size = arcSize, style = Stroke(stroke))
@@ -231,6 +298,13 @@ fun CountdownRing(fraction: Float, text: String, color: Color, size: Dp, modifie
             )
         }
         // No live region: it would announce every tick. Ends are announced by the alert instead.
-        Text(text, style = if (size >= 200.dp) MaterialTheme.typography.displayLarge else MaterialTheme.typography.displayMedium)
+        Text(
+            text,
+            style = when {
+                size >= 200.dp -> MaterialTheme.typography.displayLarge
+                size >= 110.dp -> MaterialTheme.typography.displayMedium
+                else -> MaterialTheme.typography.headlineMedium
+            },
+        )
     }
 }

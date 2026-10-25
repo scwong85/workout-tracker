@@ -5,55 +5,39 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.workouttracker.app.ui.theme.WorkoutTheme
+import com.workouttracker.domain.ExerciseType
 import com.workouttracker.domain.Format
 import com.workouttracker.domain.Phase
 import com.workouttracker.domain.QueuedSet
-import kotlin.math.abs
 
+/**
+ * Contents of the rest card. Like the set card it is swiped as a whole (right = start the next
+ * set, left = +30 s, up = add an exercise); the −15/+15 taps are small fine adjustments.
+ */
 @Composable
-fun RestView(
+fun RestContent(
     rest: Phase.Resting,
     now: Long,
     next: QueuedSet?,
     onAdjust: (Int) -> Unit,
-    onSkip: () -> Unit,
-    onAdd: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val density = LocalDensity.current
     val total = (rest.endsAt - rest.startedAt).coerceAtLeast(1)
     val remaining = (rest.endsAt - now).coerceAtLeast(0)
     val over = remaining == 0L
     Column(
-        modifier
-            .fillMaxSize()
-            // Same shortcuts as the web app's rest card: swipe right = end rest, up = add exercise.
-            .swipeGesture(
-                key = Unit,
-                onEnd = { drag, size ->
-                    val upThreshold = with(density) { 120.dp.toPx() }
-                    // 30% of the width, matching the set card and the web app.
-                    when {
-                        drag.x > size.width * 0.3f && abs(drag.x) > abs(drag.y) -> onSkip()
-                        drag.y < -upThreshold && abs(drag.y) > abs(drag.x) -> onAdd()
-                    }
-                },
-            )
-            .padding(24.dp),
+        modifier.fillMaxSize().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
@@ -62,43 +46,31 @@ fun RestView(
             style = MaterialTheme.typography.labelLarge,
             color = WorkoutTheme.colors.rest,
         )
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(12.dp))
         CountdownRing(
             fraction = remaining.toFloat() / total,
             text = Format.clockCeil(remaining),
             color = WorkoutTheme.colors.rest,
-            size = 240.dp,
+            size = 220.dp,
         )
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(16.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             OutlinedButton(onClick = { onAdjust(-15) }) { Text("−15s") }
             OutlinedButton(onClick = { onAdjust(15) }) { Text("+15s") }
         }
-        Spacer(Modifier.height(32.dp))
         if (next != null) {
+            Spacer(Modifier.height(24.dp))
             Text("Up next", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(next.summary(), style = MaterialTheme.typography.titleMedium)
+            Text(next.summary(), style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
         }
-        Spacer(Modifier.height(24.dp))
-        Button(
-            onClick = onSkip,
-            colors = ButtonDefaults.buttonColors(containerColor = WorkoutTheme.colors.rest, contentColor = WorkoutTheme.colors.onRest),
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-        ) { Text(if (over) "Start next set" else "Skip rest") }
-        Text(
-            "Swipe right to skip rest · up to add an exercise",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 12.dp),
-        )
     }
 }
 
 /** "Dips · 8 reps" or "Plank · 0:45 + Dips · 8 reps". */
 fun QueuedSet.summary(): String = exercises.joinToString(" + ") { ex ->
     val target = when (ex.type) {
-        com.workouttracker.domain.ExerciseType.REPS -> "${ex.targetReps} reps"
-        com.workouttracker.domain.ExerciseType.DURATION -> Format.clock(ex.targetDurationSec)
+        ExerciseType.REPS -> "${ex.targetReps} reps"
+        ExerciseType.DURATION -> Format.clock(ex.targetDurationSec)
     }
     "${ex.exerciseName} · $target"
 }

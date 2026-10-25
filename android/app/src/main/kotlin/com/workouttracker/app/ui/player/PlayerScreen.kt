@@ -15,22 +15,20 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.SkipNext
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -38,7 +36,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -55,15 +52,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.workouttracker.app.service.WorkoutNotifications
 import com.workouttracker.app.ui.appContainer
 import com.workouttracker.app.ui.appViewModel
-import com.workouttracker.app.ui.components.EmptyState
 import com.workouttracker.app.ui.components.ExercisePickerSheet
 import com.workouttracker.app.ui.components.LocalMessenger
 import com.workouttracker.app.ui.components.StepperRow
@@ -75,6 +73,7 @@ import com.workouttracker.domain.Phase
 import com.workouttracker.domain.PlanDefaults
 import com.workouttracker.domain.Records
 import com.workouttracker.domain.Session
+import com.workouttracker.domain.SetOutcome
 import com.workouttracker.domain.WeightUnit
 import kotlinx.coroutines.launch
 
@@ -144,6 +143,68 @@ fun PlayerScreen(
     // An empty quick workout starts by choosing exercises.
     LaunchedEffect(w.queue.isEmpty()) { if (w.queue.isEmpty()) showPicker = true }
 
+    val draft = remember { FinishDraft("${w.planName} (saved)") }
+    val complete = reviewing || phase == Phase.Complete
+    val current = w.current
+    val nothingDone = w.log.none { it.outcome == SetOutcome.DONE }
+
+    fun finishWorkout() {
+        if (saving) return
+        saving = true
+        scope.launch {
+            val session = vm.finish(
+                draft.rating,
+                draft.note,
+                draft.planName.takeIf { draft.saveAsPlan && w.planId == null },
+                draft.updatePlan,
+            )
+            messenger.show(if (session != null) "Workout saved" else "Workout ended")
+            onSaved(session)
+        }
+    }
+
+    // Everything in the workout is driven by swipes; what each direction does depends on the card.
+    val colors = WorkoutTheme.colors
+    val primary = MaterialTheme.colorScheme.primary
+    val addExercise = SwipeAction("Add exercise", Icons.Outlined.Add, primary, flyOff = false) { showPicker = true }
+    val actions = when {
+        complete -> SwipeActions(
+            right = SwipeAction(if (nothingDone) "End workout" else "Save workout", Icons.Filled.Check, colors.success) { finishWorkout() },
+            left = if (phase != Phase.Complete) {
+                SwipeAction("Keep going", Icons.AutoMirrored.Filled.ArrowBack, colors.warning, flyOff = false) { reviewing = false }
+            } else null,
+            up = SwipeAction("Add more", Icons.Outlined.Add, primary, flyOff = false) { reviewing = false; showPicker = true },
+        )
+        phase is Phase.Resting -> SwipeActions(
+            right = SwipeAction("Start next set", Icons.Filled.PlayArrow, colors.rest) { vm.skipRest() },
+            left = SwipeAction("+30s", Icons.Outlined.Timer, colors.rest, flyOff = false) { vm.adjustRest(30) },
+            up = addExercise,
+        )
+        phase is Phase.Performing && current != null -> SwipeActions(
+            right = SwipeAction("Log set", Icons.Filled.Check, colors.success) {
+                vm.complete()
+                messenger.undo("Set logged") { vm.undo() }
+            },
+            left = SwipeAction("Skip", Icons.Outlined.SkipNext, colors.warning) {
+                vm.skip()
+                messenger.undo("Set skipped") { vm.undo() }
+            },
+            up = addExercise,
+        )
+        else -> SwipeActions(up = addExercise)
+    }
+    val deckKey: Any = when {
+        complete -> "complete"
+        phase is Phase.Resting -> "rest-${current?.id}"
+        phase is Phase.Performing && current != null -> current.id
+        else -> "empty"
+    }
+    val cardColor = if (phase is Phase.Resting && !complete) {
+        colors.rest.copy(alpha = 0.16f).compositeOver(MaterialTheme.colorScheme.surfaceContainer)
+    } else {
+        MaterialTheme.colorScheme.surfaceContainer
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -172,85 +233,41 @@ fun PlayerScreen(
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             ProgressStrip(w)
-            val current = w.current
-            when {
-                reviewing || phase == Phase.Complete -> CompleteView(
-                    workout = w,
-                    now = now,
-                    weightUnit = prefs.weightUnit,
-                    finishedEarly = phase != Phase.Complete,
-                    personalRecords = remember(w.log, history) { Records.newRecords(history, w.log, prefs.weightUnit) },
-                    saving = saving,
-                    onAddMore = { reviewing = false; showPicker = true },
-                    onKeepGoing = if (phase != Phase.Complete) ({ reviewing = false }) else null,
-                    onFinish = { choices ->
-                        saving = true
-                        scope.launch {
-                            val session = vm.finish(choices.rating, choices.note, choices.saveAsPlanName, choices.updatePlan)
-                            messenger.show(if (session != null) "Workout saved" else "Workout ended")
-                            onSaved(session)
-                        }
-                    },
-                )
-                phase is Phase.Resting -> RestView(
-                    rest = phase,
-                    now = now,
-                    next = current,
-                    onAdjust = vm::adjustRest,
-                    onSkip = vm::skipRest,
-                    onAdd = { showPicker = true },
-                )
-                phase is Phase.Performing && current != null -> Column(Modifier.fillMaxSize()) {
-                    Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp)) {
-                        SwipeCard(
-                            cardKey = current.id,
-                            onDone = {
-                                vm.complete()
-                                messenger.undo("Set logged") { vm.undo() }
-                            },
-                            onSkip = {
-                                vm.skip()
-                                messenger.undo("Set skipped") { vm.undo() }
-                            },
-                            onAdd = { showPicker = true },
-                        ) {
-                            SetContent(
-                                set = current,
-                                phase = phase,
-                                now = now,
-                                weightUnit = prefs.weightUnit,
-                                lastTime = { ex -> lastTimes[ex.exerciseId]?.let { "Last time: " + Records.describe(it, prefs.weightUnit) } },
-                                onAdjust = vm::adjust,
-                                onStartHold = vm::startHold,
-                                onStopHold = vm::complete,
-                            )
-                        }
-                        Text(
-                            "Swipe right to log · left to skip · up to add",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 12.dp),
-                        )
-                    }
-                    UpNextRow(w, onClick = { showQueue = true })
-                    ActionBar(
-                        onSkip = {
-                            vm.skip()
-                            messenger.undo("Set skipped") { vm.undo() }
-                        },
-                        onDone = {
-                            vm.complete()
-                            messenger.undo("Set logged") { vm.undo() }
-                        },
-                        onAdd = { showPicker = true },
+            SwipeDeck(
+                cardKey = deckKey,
+                actions = actions,
+                cardColor = cardColor,
+                modifier = Modifier.weight(1f),
+            ) {
+                when {
+                    complete -> CompleteContent(
+                        workout = w,
+                        now = now,
+                        weightUnit = prefs.weightUnit,
+                        finishedEarly = phase != Phase.Complete,
+                        personalRecords = remember(w.log, history) { Records.newRecords(history, w.log, prefs.weightUnit) },
+                        draft = draft,
                     )
-                }
-                else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    EmptyState(Icons.Outlined.Add, "Add your first exercise", "Pick what you're doing and it'll appear here as a card.") {
-                        Button(onClick = { showPicker = true }) { Text("Add exercises") }
-                    }
+                    phase is Phase.Resting -> RestContent(
+                        rest = phase,
+                        now = now,
+                        next = current,
+                        onAdjust = vm::adjustRest,
+                    )
+                    phase is Phase.Performing && current != null -> SetContent(
+                        set = current,
+                        phase = phase,
+                        now = now,
+                        weightUnit = prefs.weightUnit,
+                        lastTime = { ex -> lastTimes[ex.exerciseId]?.let { "Last time: " + Records.describe(it, prefs.weightUnit) } },
+                        onAdjust = vm::adjust,
+                        onStartHold = vm::startHold,
+                        onStopHold = vm::complete,
+                    )
+                    else -> EmptyCard()
                 }
             }
+            if (!complete && phase !is Phase.Resting) UpNextRow(w, onClick = { showQueue = true })
         }
     }
 
@@ -346,33 +363,20 @@ private fun UpNextRow(w: ActiveWorkout, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ActionBar(onSkip: () -> Unit, onDone: () -> Unit, onAdd: () -> Unit) {
-    val colors = WorkoutTheme.colors
-    Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-            OutlinedButton(
-                onClick = onSkip,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = colors.warning),
-                modifier = Modifier.weight(1f).height(64.dp),
-            ) {
-                Icon(Icons.Outlined.SkipNext, contentDescription = null)
-                Spacer(Modifier.width(6.dp))
-                Text("Skip")
-            }
-            Button(
-                onClick = onDone,
-                colors = ButtonDefaults.buttonColors(containerColor = colors.success, contentColor = colors.onSuccess),
-                modifier = Modifier.weight(2f).height(64.dp),
-            ) {
-                Icon(Icons.Filled.Check, contentDescription = null)
-                Spacer(Modifier.width(6.dp))
-                Text("Done", style = MaterialTheme.typography.titleMedium)
-            }
-        }
-        TextButton(onClick = onAdd, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-            Icon(Icons.Outlined.Add, contentDescription = null)
-            Spacer(Modifier.width(6.dp))
-            Text("Add exercise  ·  or swipe up")
-        }
+private fun EmptyCard() {
+    Column(
+        Modifier.fillMaxSize().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(Icons.Outlined.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(48.dp))
+        Spacer(Modifier.height(12.dp))
+        Text("Add your first exercise", style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+        Text(
+            "Swipe up to pick what you're doing. It'll appear here as a card.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
     }
 }
