@@ -3,6 +3,8 @@ package com.workouttracker.app.ui
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -15,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -24,18 +27,28 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.workouttracker.app.ui.components.LocalSnackbar
+import com.workouttracker.app.ui.components.LocalMessenger
+import com.workouttracker.app.ui.library.ExerciseDetailScreen
+import com.workouttracker.app.ui.library.ExerciseEditScreen
+import com.workouttracker.app.ui.library.LibraryScreen
+import com.workouttracker.app.ui.plans.PlanEditorScreen
+import com.workouttracker.app.ui.plans.PlansScreen
+import com.workouttracker.app.ui.components.Messenger
 
 @Composable
 fun AppRoot() {
     val navController = rememberNavController()
     val snackbar = remember { SnackbarHostState() }
+    val uiScope = rememberCoroutineScope()
+    val messenger = remember { Messenger(snackbar, uiScope) }
     val backStack by navController.currentBackStackEntryAsState()
     val destination = backStack?.destination
     val showBottomBar = TopLevel.entries.any { top -> destination?.hierarchy?.any { it.route == top.route } == true }
 
-    CompositionLocalProvider(LocalSnackbar provides snackbar) {
+    CompositionLocalProvider(LocalMessenger provides messenger) {
         Scaffold(
+            // Screens own their top insets; this scaffold only reserves room for the bottom bar.
+            contentWindowInsets = WindowInsets(0),
             snackbarHost = { SnackbarHost(snackbar) },
             bottomBar = {
                 if (showBottomBar) {
@@ -58,12 +71,41 @@ fun AppRoot() {
             NavHost(
                 navController = navController,
                 startDestination = Routes.TODAY,
-                modifier = Modifier.padding(padding),
+                modifier = Modifier.padding(padding).consumeWindowInsets(padding),
             ) {
                 composable(Routes.TODAY) { Placeholder("Today") }
-                composable(Routes.PLANS) { Placeholder("Plans") }
+                composable(Routes.PLANS) {
+                    PlansScreen(
+                        onEditPlan = { navController.navigate(Routes.planEdit(it)) },
+                        onCreatePlan = { navController.navigate(Routes.planEdit()) },
+                    )
+                }
+                composable(Routes.PLAN_EDIT) { entry ->
+                    PlanEditorScreen(
+                        planId = entry.arguments?.getString("planId") ?: Routes.NEW,
+                        onDone = { navController.popBackStack() },
+                    )
+                }
                 composable(Routes.PROGRESS) { Placeholder("Progress") }
-                composable(Routes.LIBRARY) { Placeholder("Library") }
+                composable(Routes.LIBRARY) {
+                    LibraryScreen(
+                        onOpenExercise = { navController.navigate(Routes.exerciseDetail(it)) },
+                        onCreateExercise = { navController.navigate(Routes.exerciseEdit()) },
+                    )
+                }
+                composable(Routes.EXERCISE_DETAIL) { entry ->
+                    ExerciseDetailScreen(
+                        exerciseId = entry.arguments?.getString("exerciseId").orEmpty(),
+                        onBack = { navController.popBackStack() },
+                        onEdit = { navController.navigate(Routes.exerciseEdit(it)) },
+                    )
+                }
+                composable(Routes.EXERCISE_EDIT) { entry ->
+                    ExerciseEditScreen(
+                        exerciseId = entry.arguments?.getString("exerciseId") ?: Routes.NEW,
+                        onDone = { navController.popBackStack() },
+                    )
+                }
             }
         }
     }

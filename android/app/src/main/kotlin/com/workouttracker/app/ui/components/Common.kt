@@ -16,20 +16,36 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
-/** App-wide snackbar host so any screen can offer "Undo". */
-val LocalSnackbar = staticCompositionLocalOf<SnackbarHostState> { error("No SnackbarHostState provided") }
+/**
+ * App-wide snackbar messenger. Its scope belongs to the root composable, so a screen can show
+ * "Undo" and then navigate away without the snackbar being cancelled.
+ */
+class Messenger(val host: SnackbarHostState, private val scope: CoroutineScope) {
+    fun show(message: String) {
+        scope.launch {
+            host.currentSnackbarData?.dismiss()
+            host.showSnackbar(message, withDismissAction = true, duration = SnackbarDuration.Short)
+        }
+    }
 
-suspend fun SnackbarHostState.showUndo(message: String, onUndo: suspend () -> Unit) {
-    currentSnackbarData?.dismiss()
-    val result = showSnackbar(message = message, actionLabel = "Undo", withDismissAction = true, duration = SnackbarDuration.Short)
-    if (result == SnackbarResult.ActionPerformed) onUndo()
+    fun undo(message: String, onUndo: suspend () -> Unit) {
+        scope.launch {
+            host.currentSnackbarData?.dismiss()
+            val result = host.showSnackbar(message, actionLabel = "Undo", withDismissAction = true, duration = SnackbarDuration.Short)
+            if (result == SnackbarResult.ActionPerformed) onUndo()
+        }
+    }
 }
+
+val LocalMessenger = staticCompositionLocalOf<Messenger> { error("No Messenger provided") }
 
 @Composable
 fun EmptyState(

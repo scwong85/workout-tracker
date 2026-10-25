@@ -31,7 +31,7 @@ fun PlanWithGroups.toDomain(exercises: Map<String, ExerciseEntity>): Plan = Plan
             items = g.items.sortedBy { it.position }.mapNotNull { item ->
                 val ex = exercises[item.exerciseId] ?: return@mapNotNull null
                 PlanItem(
-                    id = item.id, exerciseId = item.exerciseId, exerciseName = ex.name, type = ex.type,
+                    id = item.id, exerciseId = item.exerciseId, exerciseName = ex.name, type = ex.type, category = ex.category,
                     sets = item.sets, reps = item.reps, durationSec = item.durationSec, weightKg = item.weightKg,
                 )
             },

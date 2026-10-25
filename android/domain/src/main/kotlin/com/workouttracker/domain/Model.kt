@@ -37,6 +37,7 @@ data class PlanItem(
     val exerciseId: String,
     val exerciseName: String,
     val type: ExerciseType,
+    val category: Category = Category.FULL_BODY,
     val sets: Int = 3,
     val reps: Int = 10,
     val durationSec: Int = 30,

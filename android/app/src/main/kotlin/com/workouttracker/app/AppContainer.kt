@@ -3,6 +3,8 @@ package com.workouttracker.app
 import android.content.Context
 import com.workouttracker.app.data.db.AppDatabase
 import com.workouttracker.app.data.db.toEntity
+import com.workouttracker.app.data.repo.ExerciseRepository
+import com.workouttracker.app.data.repo.PlanRepository
 import com.workouttracker.domain.Presets
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -14,6 +16,8 @@ class AppContainer(context: Context) {
     val appContext: Context = context.applicationContext
     val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val database: AppDatabase = AppDatabase.build(appContext)
+    val exercises = ExerciseRepository(database)
+    val plans = PlanRepository(database)
 
     fun start() {
         appScope.launch {

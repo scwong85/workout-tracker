@@ -47,6 +47,7 @@ jobs:
           name: reports
           path: |
             android/**/build/reports/**
+            android/app/schemas/**
           if-no-files-found: ignore
 
       - uses: actions/upload-artifact@v4
