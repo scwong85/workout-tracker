@@ -74,8 +74,9 @@ class PlayerViewModel(private val container: AppContainer) : ViewModel() {
             val groups = WorkoutEngine.toPlanGroups(w)
             if (groups.isNotEmpty()) container.plans.save(Plan(id = "", name = saveAsPlanName, groups = groups))
         }
-        if (updatePlan && w.planId != null) {
-            container.plans.get(w.planId)?.let { container.plans.save(PlanUpdates.applyActuals(it, w.log)) }
+        val planId = w.planId
+        if (updatePlan && planId != null) {
+            container.plans.get(planId)?.let { container.plans.save(PlanUpdates.applyActuals(it, w.log)) }
         }
         return repo.finish(rating, note)
     }

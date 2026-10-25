@@ -64,17 +64,19 @@ object WorkoutNotifications {
         )
 
     /** The ongoing notification; the chronometer counts down on its own, so it stays right while the CPU sleeps. */
-    fun ongoing(context: Context, w: ActiveWorkout): android.app.Notification {
+    fun ongoing(context: Context, w: ActiveWorkout?): android.app.Notification {
         val b = NotificationCompat.Builder(context, CHANNEL_ONGOING)
             .setSmallIcon(R.drawable.ic_stat_workout)
-            .setContentTitle(w.planName)
             .setContentIntent(openPlayer(context))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)
-            .setCategory(NotificationCompat.CATEGORY_WORKOUT)
+            .setCategory("workout") // Notification.CATEGORY_WORKOUT; literal so older compat libs compile
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+
+        if (w == null) return b.setContentTitle("Workout").build()
+        b.setContentTitle(w.planName)
             .setProgress(w.queue.size.coerceAtLeast(1), w.cursor.coerceAtMost(w.queue.size), false)
 
         when (val phase = w.phase) {

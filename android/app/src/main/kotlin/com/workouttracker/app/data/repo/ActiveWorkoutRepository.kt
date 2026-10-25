@@ -148,8 +148,10 @@ class ActiveWorkoutRepository(
                 alertedRestEndsAt = phase.endsAt
                 _events.tryEmit(WorkoutEvent.RestEnded)
             }
-            is Phase.Performing -> if (phase.holdEndsAt != null && now >= phase.holdEndsAt) {
-                _events.tryEmit(WorkoutEvent.HoldEnded)
+            is Phase.Performing -> {
+                // Local copy: smart casts don't apply to properties declared in another module.
+                val holdEndsAt = phase.holdEndsAt
+                if (holdEndsAt != null && now >= holdEndsAt) _events.tryEmit(WorkoutEvent.HoldEnded)
             }
             Phase.Complete -> Unit
         }

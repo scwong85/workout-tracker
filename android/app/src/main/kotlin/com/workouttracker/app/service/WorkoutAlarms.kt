@@ -20,7 +20,7 @@ class WorkoutAlarms(private val context: Context) {
 
     fun schedule(atEpochMs: Long) {
         val manager = alarms ?: return
-        val exactAllowed = Build.VERSION.SDK_INT < 31 || manager.canScheduleExactAlarms()
+        val exactAllowed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) manager.canScheduleExactAlarms() else true
         try {
             if (exactAllowed) {
                 manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atEpochMs, intent())

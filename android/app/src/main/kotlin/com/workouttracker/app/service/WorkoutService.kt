@@ -24,12 +24,15 @@ class WorkoutService : LifecycleService() {
         super.onStartCommand(intent, flags, startId)
         val container = (application as WorkoutApp).container
         val workout = container.activeWorkout.state.value
+        val type = if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0
+        // startForeground must always be called after startForegroundService, even if the
+        // workout ended in the meantime, or the system crashes the app.
+        ServiceCompat.startForeground(this, WorkoutNotifications.ID_ONGOING, WorkoutNotifications.ongoing(this, workout), type)
         if (workout == null) {
+            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
             stopSelf()
             return START_NOT_STICKY
         }
-        val type = if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE else 0
-        ServiceCompat.startForeground(this, WorkoutNotifications.ID_ONGOING, WorkoutNotifications.ongoing(this, workout), type)
         if (!observing) {
             observing = true
             lifecycleScope.launch {
