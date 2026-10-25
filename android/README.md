@@ -40,7 +40,14 @@ cd android
 ```
 
 Or install a built APK with `adb install -r app/build/outputs/apk/debug/app-debug.apk`.
-On Windows use `gradlew.bat` instead of `./gradlew`.
+On Windows, run the commands from the `android` folder with `.\gradlew.bat` instead of
+`./gradlew`. PowerShell needs the leading `.\`; in Command Prompt plain `gradlew` works:
+
+```powershell
+cd android
+.\gradlew.bat :app:assembleDebug
+.\gradlew.bat :app:installDebug
+```
 
 The debug build installs as **Workout Tracker** with id `com.workouttracker.app.debug`, so it can
 sit alongside a future release build.

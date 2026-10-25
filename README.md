@@ -32,6 +32,8 @@ cd android
 ./gradlew :app:installDebug      # build and install on a connected phone or emulator
 ```
 
+On Windows (PowerShell), use `.\gradlew.bat` in place of `./gradlew`, e.g. `.\gradlew.bat :app:assembleDebug`.
+
 **Without a local setup:** on GitHub go to **Actions → Android CI → Run workflow**, then download
 the `workout-tracker-debug-apk` artifact and open the APK on your phone.
 
