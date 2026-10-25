@@ -1,8 +1,6 @@
 package com.workouttracker.app.ui
 
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
@@ -19,7 +17,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -40,6 +37,8 @@ import com.workouttracker.app.ui.player.PlayerPrefs
 import com.workouttracker.app.ui.player.PlayerScreen
 import com.workouttracker.app.ui.progress.ProgressScreen
 import com.workouttracker.app.ui.progress.SessionDetailScreen
+import com.workouttracker.app.ui.settings.SettingsScreen
+import com.workouttracker.app.ui.today.TodayScreen
 import com.workouttracker.app.ui.components.Messenger
 
 @Composable
@@ -97,7 +96,17 @@ fun AppRoot(openPlayerSignal: Int = 0) {
                 startDestination = Routes.TODAY,
                 modifier = Modifier.padding(padding).consumeWindowInsets(padding),
             ) {
-                composable(Routes.TODAY) { Placeholder("Today") }
+                composable(Routes.TODAY) {
+                    TodayScreen(
+                        onStartPlan = launcher::startPlan,
+                        onQuickWorkout = launcher::startQuick,
+                        onCreatePlan = { navController.navigate(Routes.planEdit()) },
+                        onOpenSession = { navController.navigate(Routes.sessionDetail(it)) },
+                        onOpenSettings = { navController.navigate(Routes.SETTINGS) },
+                        onSeeHistory = { navController.navigateTopLevel(Routes.PROGRESS) },
+                    )
+                }
+                composable(Routes.SETTINGS) { SettingsScreen(onBack = { navController.popBackStack() }) }
                 composable(Routes.PLANS) {
                     PlansScreen(
                         onEditPlan = { navController.navigate(Routes.planEdit(it)) },
@@ -116,6 +125,8 @@ fun AppRoot(openPlayerSignal: Int = 0) {
                     PlanEditorScreen(
                         planId = entry.arguments?.getString("planId") ?: Routes.NEW,
                         onDone = { navController.popBackStack() },
+                        weightUnit = settings.weightUnit,
+                        configure = { it.defaultRestSec = settings.defaultRestSec },
                     )
                 }
                 composable(Routes.PROGRESS) {
@@ -163,9 +174,4 @@ fun NavHostController.navigateTopLevel(route: String) {
         launchSingleTop = true
         restoreState = true
     }
-}
-
-@Composable
-private fun Placeholder(name: String) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(name) }
 }

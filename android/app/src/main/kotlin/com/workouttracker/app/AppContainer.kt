@@ -4,6 +4,7 @@ import android.content.Context
 import com.workouttracker.app.data.db.AppDatabase
 import com.workouttracker.app.data.db.toEntity
 import com.workouttracker.app.data.repo.ActiveWorkoutRepository
+import com.workouttracker.app.data.repo.BackupRepository
 import com.workouttracker.app.data.repo.ExerciseRepository
 import com.workouttracker.app.data.repo.PlanRepository
 import com.workouttracker.app.data.repo.SessionRepository
@@ -26,6 +27,7 @@ class AppContainer(context: Context) {
     val activeWorkout = ActiveWorkoutRepository(database, sessions, plans, appScope)
     val settings = SettingsRepository(appContext, appScope)
     val background = WorkoutBackground(appContext, activeWorkout, settings, appScope)
+    val backup = BackupRepository(appContext, database, exercises, plans, sessions, activeWorkout)
 
     fun start() {
         background.start()

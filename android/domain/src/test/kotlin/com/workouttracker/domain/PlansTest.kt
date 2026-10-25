@@ -84,3 +84,15 @@ class SessionPlansTest {
         assertEquals(Category.CHEST, groups[0].items[0].category)
     }
 }
+
+class TemplatesTest {
+    @Test fun templatesOnlyUsePresetsAndHaveSets() {
+        val presetIds = Presets.exercises.map { it.id }.toSet()
+        val plans = Templates.all(now = 1)
+        assertEquals(5, plans.size)
+        plans.forEach { p ->
+            assertTrue(p.totalSets > 0, p.name)
+            assertTrue(p.groups.flatMap { it.items }.all { it.exerciseId in presetIds }, p.name)
+        }
+    }
+}
