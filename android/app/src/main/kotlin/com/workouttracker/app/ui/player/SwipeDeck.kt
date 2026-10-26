@@ -106,8 +106,14 @@ fun SwipeDeck(
     actions: SwipeActions,
     modifier: Modifier = Modifier,
     cardColor: Color = MaterialTheme.colorScheme.surfaceContainer,
+    // Haptics for crossing the threshold and for committing. By default the system's view haptics
+    // are used, which the phone's "touch feedback" setting can silence; the player passes its own.
+    onArmed: (() -> Unit)? = null,
+    onCommit: (() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
+    val armedFeedback by rememberUpdatedState(onArmed)
+    val commitFeedback by rememberUpdatedState(onCommit)
     val currentActions by rememberUpdatedState(actions)
     val currentKey by rememberUpdatedState(cardKey)
     val scope = rememberCoroutineScope()
@@ -142,14 +148,14 @@ fun SwipeDeck(
                         SwipeDirection.LEFT -> Offset(-w * 1.3f, shown.y)
                         else -> Offset(shown.x, -size.height * 1.3f)
                     }
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    commitFeedback?.invoke() ?: haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     animateOffset(shown, target, tween(160)) { shown = it }
                     hiddenKey = currentKey
                     shown = Offset.Zero
                     action.onCommit()
                 }
                 else -> {
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                    commitFeedback?.invoke() ?: haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                     action.onCommit()
                     animateOffset(shown, Offset.Zero, spring(dampingRatio = Spring.DampingRatioMediumBouncy)) { shown = it }
                 }
@@ -190,7 +196,7 @@ fun SwipeDeck(
                     val nowArmed = r.direction.takeIf { r.committed }
                     if (nowArmed != armed) {
                         armed = nowArmed
-                        if (nowArmed != null) haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        if (nowArmed != null) armedFeedback?.invoke() ?: haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     }
                 },
                 onEnd = { total -> settle(total) },

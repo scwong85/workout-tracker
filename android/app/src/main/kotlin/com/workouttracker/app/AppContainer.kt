@@ -9,6 +9,7 @@ import com.workouttracker.app.data.repo.ExerciseRepository
 import com.workouttracker.app.data.repo.PlanRepository
 import com.workouttracker.app.data.repo.SessionRepository
 import com.workouttracker.app.data.repo.SettingsRepository
+import com.workouttracker.app.service.Feedback
 import com.workouttracker.app.service.WorkoutBackground
 import com.workouttracker.domain.Presets
 import kotlinx.coroutines.CoroutineScope
@@ -26,7 +27,8 @@ class AppContainer(context: Context) {
     val sessions = SessionRepository(database)
     val activeWorkout = ActiveWorkoutRepository(database, sessions, plans, appScope)
     val settings = SettingsRepository(appContext, appScope)
-    val background = WorkoutBackground(appContext, activeWorkout, settings, appScope)
+    val feedback = Feedback(appContext) { settings.settings.value }
+    val background = WorkoutBackground(appContext, activeWorkout, settings, feedback, appScope)
     val backup = BackupRepository(appContext, database, exercises, plans, sessions, activeWorkout)
 
     fun start() {

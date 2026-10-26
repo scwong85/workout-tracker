@@ -50,6 +50,7 @@ import com.workouttracker.app.ui.components.SwipeRow
 import com.workouttracker.app.ui.theme.WorkoutTheme
 import com.workouttracker.app.ui.components.relativeDay
 import com.workouttracker.domain.Plan
+import com.workouttracker.domain.PlanOrder
 import com.workouttracker.domain.PlanEstimator
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -59,7 +60,7 @@ import kotlinx.coroutines.launch
 
 class PlansViewModel(private val container: AppContainer) : ViewModel() {
     val plans: StateFlow<List<Plan>?> = container.plans.observeAll()
-        .map { list -> list.sortedWith(compareByDescending<Plan> { it.lastPerformedAt ?: 0 }.thenByDescending { it.updatedAt }) }
+        .map { list -> PlanOrder.recentFirst(list) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     fun duplicate(plan: Plan) = viewModelScope.launch { container.plans.duplicate(plan.id) }

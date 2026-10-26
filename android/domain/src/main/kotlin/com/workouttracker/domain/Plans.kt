@@ -173,3 +173,18 @@ object SessionPlans {
             )
         }
 }
+
+object PlanOrder {
+    /**
+     * Most recently performed first; plans never performed follow, newest edit first.
+     *
+     * Deliberately uses `Long` keys throughout: a selector like `lastPerformedAt ?: 0` yields a
+     * `Comparable<*>` that mixes Long and Int, which throws ClassCastException at runtime as
+     * soon as a performed plan is compared with an unperformed one.
+     */
+    fun recentFirst(plans: List<Plan>): List<Plan> =
+        plans.sortedWith(
+            compareByDescending<Plan> { it.lastPerformedAt ?: Long.MIN_VALUE }
+                .thenByDescending { it.updatedAt },
+        )
+}

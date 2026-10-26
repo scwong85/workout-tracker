@@ -141,6 +141,8 @@ class ActiveWorkoutRepository(
 
     /** Advances timers. Also called from the alarm receiver when the app is in the background. */
     suspend fun tick() {
+        // An alarm can start a fresh process; wait for the saved workout instead of seeing "none".
+        awaitLoaded()
         val current = _state.value ?: return
         val now = clock()
         when (val phase = current.phase) {

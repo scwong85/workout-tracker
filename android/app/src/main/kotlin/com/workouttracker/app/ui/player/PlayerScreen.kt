@@ -123,6 +123,7 @@ fun PlayerScreen(
 
     // Ask for notifications in context, the first time a workout is opened (Android 13+).
     val container = appContainer()
+    val feedback = container.feedback
     val context = LocalContext.current
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         container.appScope.launch { container.settings.setAskedNotifications() }
@@ -166,26 +167,28 @@ fun PlayerScreen(
     // Everything in the workout is driven by swipes; what each direction does depends on the card.
     val colors = WorkoutTheme.colors
     val primary = MaterialTheme.colorScheme.primary
-    val addExercise = SwipeAction("Add exercise", Icons.Outlined.Add, primary, flyOff = false) { showPicker = true }
+    val addExercise = SwipeAction("Add exercise", Icons.Outlined.Add, primary, flyOff = false) { feedback.added(); showPicker = true }
     val actions = when {
         complete -> SwipeActions(
-            right = SwipeAction(if (nothingDone) "End workout" else "Save workout", Icons.Filled.Check, colors.success) { finishWorkout() },
+            right = SwipeAction(if (nothingDone) "End workout" else "Save workout", Icons.Filled.Check, colors.success) { feedback.saved(); finishWorkout() },
             left = if (phase != Phase.Complete) {
-                SwipeAction("Keep going", Icons.AutoMirrored.Filled.ArrowBack, colors.warning, flyOff = false) { reviewing = false }
+                SwipeAction("Keep going", Icons.AutoMirrored.Filled.ArrowBack, colors.warning, flyOff = false) { feedback.added(); reviewing = false }
             } else null,
-            up = SwipeAction("Add more", Icons.Outlined.Add, primary, flyOff = false) { reviewing = false; showPicker = true },
+            up = SwipeAction("Add more", Icons.Outlined.Add, primary, flyOff = false) { feedback.added(); reviewing = false; showPicker = true },
         )
         phase is Phase.Resting -> SwipeActions(
-            right = SwipeAction("Start next set", Icons.Filled.PlayArrow, colors.rest) { vm.skipRest() },
-            left = SwipeAction("+30s", Icons.Outlined.Timer, colors.rest, flyOff = false) { vm.adjustRest(30) },
+            right = SwipeAction("Start next set", Icons.Filled.PlayArrow, colors.rest) { feedback.added(); vm.skipRest() },
+            left = SwipeAction("+30s", Icons.Outlined.Timer, colors.rest, flyOff = false) { feedback.added(); vm.adjustRest(30) },
             up = addExercise,
         )
         phase is Phase.Performing && current != null -> SwipeActions(
             right = SwipeAction("Log set", Icons.Filled.Check, colors.success) {
+                feedback.logged()
                 vm.complete()
                 messenger.undo("Set logged") { vm.undo() }
             },
             left = SwipeAction("Skip", Icons.Outlined.SkipNext, colors.warning) {
+                feedback.skipped()
                 vm.skip()
                 messenger.undo("Set skipped") { vm.undo() }
             },
@@ -237,6 +240,9 @@ fun PlayerScreen(
                 cardKey = deckKey,
                 actions = actions,
                 cardColor = cardColor,
+                onArmed = feedback::tick,
+                // Each action gives its own feedback above.
+                onCommit = {},
                 modifier = Modifier.weight(1f),
             ) {
                 when {

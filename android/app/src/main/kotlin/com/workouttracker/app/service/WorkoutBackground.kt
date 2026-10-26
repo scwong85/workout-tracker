@@ -5,6 +5,7 @@ import com.workouttracker.app.data.repo.ActiveWorkoutRepository
 import com.workouttracker.app.data.repo.SettingsRepository
 import com.workouttracker.domain.Phase
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -17,10 +18,11 @@ class WorkoutBackground(
     private val context: Context,
     private val repo: ActiveWorkoutRepository,
     private val settings: SettingsRepository,
+    feedback: Feedback,
     private val scope: CoroutineScope,
 ) {
     private val alarms = WorkoutAlarms(context)
-    private val alerts = RestAlerts(context)
+    private val alerts = RestAlerts(context, feedback)
 
     fun start() {
         WorkoutNotifications.createChannels(context)
@@ -45,7 +47,9 @@ class WorkoutBackground(
                 .collect { wakeAt -> if (wakeAt == null) alarms.cancel() else alarms.schedule(wakeAt) }
         }
 
-        scope.launch {
+        // UNDISPATCHED registers the subscriber before start() returns, so an alarm that wakes a
+        // freshly started process can't emit before anyone is listening.
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
             repo.events.collect { event ->
                 val next = repo.state.value?.current?.exercises?.joinToString(" + ") { it.exerciseName }
                 alerts.onEvent(event, settings.settings.value, next)

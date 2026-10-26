@@ -1,57 +1,37 @@
 package com.workouttracker.app.service
 
 import android.content.Context
-import android.media.AudioAttributes
-import android.media.RingtoneManager
-import android.os.Build
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ProcessLifecycleOwner
 import com.workouttracker.app.data.repo.Settings
 import com.workouttracker.app.data.repo.WorkoutEvent
 
-/** Sound and vibration when a rest or hold ends; a heads-up notification when the app is in the background. */
-class RestAlerts(private val context: Context) {
-
-    private val vibrator: Vibrator? =
-        if (Build.VERSION.SDK_INT >= 31) {
-            context.getSystemService(VibratorManager::class.java)?.defaultVibrator
-        } else {
-            @Suppress("DEPRECATION")
-            context.getSystemService(Vibrator::class.java)
-        }
+/**
+ * Tells the user a rest or hold has ended.
+ *
+ * On screen we vibrate and beep ourselves. In the background we post a heads-up notification whose
+ * channel supplies sound and vibration (the system plays those reliably while the app is asleep);
+ * if notifications are blocked, or only one of sound/vibration is wanted, we fall back to doing
+ * it ourselves so the Settings toggles are always honoured.
+ */
+class RestAlerts(private val context: Context, private val feedback: Feedback) {
 
     fun onEvent(event: WorkoutEvent, settings: Settings, nextLabel: String?) {
         val foreground = ProcessLifecycleOwner.get().lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+        if (foreground) {
+            feedback.alarm()
+            return
+        }
         val (title, text) = when (event) {
             WorkoutEvent.RestEnded -> "Rest's over" to (nextLabel?.let { "Next: $it" } ?: "Time for your next set")
             WorkoutEvent.HoldEnded -> "Time!" to "Hold complete — set logged"
         }
-        if (foreground) {
-            if (settings.vibration) vibrate()
-            if (settings.sound) beep()
-        } else {
-            // The alert channel makes the sound; vibrate ourselves so the pattern is consistent.
-            if (settings.vibration) vibrate()
-            WorkoutNotifications.postAlert(context, title, text, sound = settings.sound, vibrate = settings.vibration)
+        val channelDoesBoth = settings.sound && settings.vibration
+        val posted = WorkoutNotifications.canPost(context) &&
+            WorkoutNotifications.postAlert(context, title, text, silent = !channelDoesBoth)
+        if (!posted || !channelDoesBoth) {
+            if (settings.vibration) feedback.buzzOnly()
+            if (settings.sound) feedback.beepOnly()
         }
-    }
-
-    private fun vibrate() {
-        val v = vibrator ?: return
-        if (!v.hasVibrator()) return
-        v.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 180, 120, 180, 120, 400), -1))
-    }
-
-    private fun beep() {
-        val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION) ?: return
-        val ringtone = RingtoneManager.getRingtone(context, uri) ?: return
-        ringtone.audioAttributes = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_NOTIFICATION_EVENT)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-            .build()
-        ringtone.play()
     }
 }

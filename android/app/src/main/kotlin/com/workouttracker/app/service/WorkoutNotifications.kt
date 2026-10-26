@@ -4,6 +4,8 @@ import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.media.AudioAttributes
+import android.media.RingtoneManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -19,7 +21,9 @@ import com.workouttracker.domain.Phase
 
 object WorkoutNotifications {
     const val CHANNEL_ONGOING = "workout_ongoing"
-    const val CHANNEL_ALERTS = "workout_alerts"
+    /** v2: channel sound and vibration can't be changed after creation, so the old channel was replaced. */
+    const val CHANNEL_ALERTS = "workout_alerts_v2"
+    private const val CHANNEL_ALERTS_V1 = "workout_alerts"
     const val ID_ONGOING = 1
     const val ID_ALERT = 2
 
@@ -33,10 +37,20 @@ object WorkoutNotifications {
                 setShowBadge(false)
             },
         )
+        manager.deleteNotificationChannel(CHANNEL_ALERTS_V1)
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL_ALERTS, "Rest finished", NotificationManager.IMPORTANCE_HIGH).apply {
                 description = "Alerts you when rest is over or a timed hold ends."
                 enableVibration(true)
+                vibrationPattern = longArrayOf(0, 200, 120, 200, 120, 500)
+                setSound(
+                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_ALARM)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build(),
+                )
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
             },
         )
     }
@@ -45,7 +59,7 @@ object WorkoutNotifications {
         android.os.Build.VERSION.SDK_INT < 33 ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
 
-    private fun openPlayer(context: Context): PendingIntent =
+    fun openPlayer(context: Context): PendingIntent =
         PendingIntent.getActivity(
             context,
             0,
@@ -113,8 +127,9 @@ object WorkoutNotifications {
     }
 
     /** Heads-up alert for rest/hold end. Posted only when the app isn't on screen. */
-    fun postAlert(context: Context, title: String, text: String, sound: Boolean, vibrate: Boolean) {
-        if (!canPost(context)) return
+    /** Posts the heads-up alert. [silent] leaves the sound and vibration to the caller. Returns false if it couldn't be shown. */
+    fun postAlert(context: Context, title: String, text: String, silent: Boolean): Boolean {
+        if (!canPost(context)) return false
         val b = NotificationCompat.Builder(context, CHANNEL_ALERTS)
             .setSmallIcon(R.drawable.ic_stat_workout)
             .setContentTitle(title)
@@ -124,11 +139,13 @@ object WorkoutNotifications {
             .setTimeoutAfter(60_000)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setSilent(!sound && !vibrate)
-        try {
+            .setSilent(silent)
+        return try {
             NotificationManagerCompat.from(context).notify(ID_ALERT, b.build())
+            true
         } catch (_: SecurityException) {
             // Permission revoked between the check and the call.
+            false
         }
     }
 

@@ -1,6 +1,8 @@
 package com.workouttracker.app.ui.settings
 
+import android.content.Intent
 import android.net.Uri
+import android.provider.Settings as AndroidSettings
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -35,13 +37,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.workouttracker.app.AppContainer
 import com.workouttracker.app.BuildConfig
 import com.workouttracker.app.data.repo.Settings
+import com.workouttracker.app.service.WorkoutNotifications
 import com.workouttracker.app.ui.appViewModel
 import com.workouttracker.app.ui.components.LocalMessenger
 import com.workouttracker.app.ui.components.StepperRow
@@ -61,6 +67,12 @@ class SettingsViewModel(private val container: AppContainer) : ViewModel() {
     val settings: StateFlow<Settings> = container.settings.settings
     private val repo = container.settings
     private val scope = container.appScope
+
+    /** Plays the rest-over alert and returns something the user can fix if it would be silent. */
+    fun testAlert(): String? {
+        container.feedback.alarm()
+        return container.feedback.diagnose()
+    }
 
     fun update(block: suspend com.workouttracker.app.data.repo.SettingsRepository.() -> Unit) {
         scope.launch { repo.block() }
@@ -92,6 +104,10 @@ fun SettingsScreen(onBack: () -> Unit) {
     val messenger = LocalMessenger.current
     var preview by remember { mutableStateOf<ImportData?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    // Re-read when coming back from the system notification settings.
+    var canNotify by remember { mutableStateOf(WorkoutNotifications.canPost(context)) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { canNotify = WorkoutNotifications.canPost(context) }
 
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) vm.export(uri) { e -> messenger.show(if (e == null) "Backup saved" else "Couldn't save backup: ${e.message}") }
@@ -145,6 +161,29 @@ fun SettingsScreen(onBack: () -> Unit) {
             Toggle("Start next set when rest ends", s.autoAdvanceRest) { v -> vm.update { setAutoAdvanceRest(v) } }
             Toggle("Sound", s.sound) { v -> vm.update { setSound(v) } }
             Toggle("Vibration", s.vibration) { v -> vm.update { setVibration(v) } }
+            ListItem(
+                modifier = Modifier.clickable {
+                    messenger.show(vm.testAlert() ?: "Played the rest-over alert. Didn't feel or hear it? Check the phone's volume and vibration settings.")
+                },
+                headlineContent = { Text("Test rest alert") },
+                supportingContent = { Text("Plays the sound and vibration used when rest ends") },
+            )
+            ListItem(
+                modifier = Modifier.clickable {
+                    context.startActivity(
+                        Intent(AndroidSettings.ACTION_APP_NOTIFICATION_SETTINGS)
+                            .putExtra(AndroidSettings.EXTRA_APP_PACKAGE, context.packageName),
+                    )
+                },
+                headlineContent = { Text("Notifications") },
+                supportingContent = {
+                    Text(
+                        if (canNotify) "On. Rest alerts show when the app is in the background."
+                        else "Off. You won't be alerted when rest ends with the screen off. Tap to turn on.",
+                        color = if (canNotify) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error,
+                    )
+                },
+            )
             Toggle("Keep screen on during workouts", s.keepScreenOn) { v -> vm.update { setKeepScreenOn(v) } }
 
             Section("Appearance")

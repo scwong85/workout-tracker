@@ -4,9 +4,14 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 
-/** One pending wake-up at the end of the current rest or hold. */
+/**
+ * One pending wake-up at the end of the current rest or hold.
+ *
+ * Uses setAlarmClock: it fires on time even in Doze and needs no special permission, unlike
+ * exact alarms, which are denied by default on recent Android and then fire minutes late. The
+ * trade-off is a small alarm icon in the status bar while resting, which suits a rest timer.
+ */
 class WorkoutAlarms(private val context: Context) {
     private val alarms = context.getSystemService(AlarmManager::class.java)
 
@@ -19,19 +24,7 @@ class WorkoutAlarms(private val context: Context) {
         )
 
     fun schedule(atEpochMs: Long) {
-        val manager = alarms ?: return
-        val exactAllowed = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) manager.canScheduleExactAlarms() else true
-        try {
-            if (exactAllowed) {
-                manager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atEpochMs, intent())
-            } else {
-                // Without the exact-alarm grant the system may delay this by a few minutes;
-                // the notification chronometer still shows the right time.
-                manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atEpochMs, intent())
-            }
-        } catch (_: SecurityException) {
-            manager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atEpochMs, intent())
-        }
+        alarms?.setAlarmClock(AlarmManager.AlarmClockInfo(atEpochMs, WorkoutNotifications.openPlayer(context)), intent())
     }
 
     fun cancel() {

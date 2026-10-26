@@ -69,6 +69,7 @@ import com.workouttracker.domain.BackupFormatException
 import com.workouttracker.domain.ImportData
 import com.workouttracker.domain.Plan
 import com.workouttracker.domain.PlanEstimator
+import com.workouttracker.domain.PlanOrder
 import com.workouttracker.domain.Progress
 import com.workouttracker.domain.Session
 import com.workouttracker.domain.Templates
@@ -331,7 +332,7 @@ private fun StartSheet(plans: List<Plan>, onDismiss: () -> Unit, onQuick: () -> 
                 supportingContent = { Text("No plan — add exercises as you go") },
             )
             HorizontalDivider()
-            val sorted = remember(plans) { plans.sortedByDescending { it.lastPerformedAt ?: 0 } }
+            val sorted = remember(plans) { PlanOrder.recentFirst(plans) }
             LazyColumn {
                 items(sorted, key = { it.id }) { plan ->
                     ListItem(

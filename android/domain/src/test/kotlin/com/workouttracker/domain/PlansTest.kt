@@ -96,3 +96,24 @@ class TemplatesTest {
         }
     }
 }
+
+class PlanOrderTest {
+    private fun plan(id: String, last: Long?, updated: Long) =
+        Plan(id = id, name = id, groups = emptyList(), updatedAt = updated, lastPerformedAt = last)
+
+    @Test fun mixedPerformedAndNeverPerformedDoesNotThrow() {
+        // Regression: this combination used to crash the Plans screen with a ClassCastException.
+        val sorted = PlanOrder.recentFirst(listOf(plan("a", null, 1), plan("b", 5L, 2), plan("c", null, 3)))
+        assertEquals(listOf("b", "c", "a"), sorted.map { it.id })
+    }
+
+    @Test fun performedPlansOrderByMostRecent() {
+        val sorted = PlanOrder.recentFirst(listOf(plan("old", 10L, 9), plan("new", 20L, 1)))
+        assertEquals(listOf("new", "old"), sorted.map { it.id })
+    }
+
+    @Test fun emptyAndSingleAreFine() {
+        assertEquals(emptyList(), PlanOrder.recentFirst(emptyList()))
+        assertEquals(listOf("x"), PlanOrder.recentFirst(listOf(plan("x", null, 0))).map { it.id })
+    }
+}

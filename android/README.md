@@ -106,7 +106,7 @@ Play App Signing.
 | `Failed to find target android-35` | `sdkmanager "platforms;android-35"` |
 | `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | An APK signed with a different key is installed; uninstall it first |
 | Gradle runs out of memory | Raise `org.gradle.jvmargs` in `gradle.properties` |
-| No rest alerts with the screen off | Allow notifications for the app; on Android 12+ grant **Alarms & reminders**; on Samsung/Xiaomi exempt the app from battery optimisation |
+| No sound or vibration | **Settings → Test rest alert** plays it and tells you if something obvious is wrong (both toggles off, no vibration motor, alarm volume at zero). The alert uses the **alarm** volume, not media. With the screen off it also needs **Settings → Notifications** to be on. On Samsung/Xiaomi exempt the app from battery optimisation. |
 
 ## Modules
 
@@ -130,7 +130,7 @@ app/src/main/kotlin/com/workouttracker/app/
   `ActiveWorkout`). Killing the app mid-set and reopening resumes exactly where you were.
 - **Timers are absolute wall-clock timestamps** (`endsAt`), never decrementing counters, so they
   don't drift and survive process death. The notification uses the platform chronometer, which
-  keeps counting even while the CPU sleeps; an exact alarm wakes the app at rest end to alert.
+  keeps counting even while the CPU sleeps; an alarm-clock alarm (exact, works in Doze, no special permission; shows a small alarm icon while resting) wakes the app at rest end to alert.
 - **All transitions are pure functions** in `WorkoutEngine`; the repository serialises them with
   a mutex and the UI, notification buttons and alarms all go through the same path.
 - **The workout is swipe-only.** One `SwipeDeck` hosts the set, rest and summary cards; there are no
@@ -161,7 +161,7 @@ SDK, so the Android build itself has **not** been run since M1. What was checked
 
 - `SwipeDeck` gestures — 10 simulated-touch tests (fast swipes, swipes starting on a button, taps,
   repeated swipes, card replacement) pass on desktop Compose; `SwipeLogic` has 8 JVM unit tests.
-- `:domain` — 45 unit tests, all passing (engine transitions, the web app's defects as regression
+- `:domain` — 48 unit tests, all passing (engine transitions, the web app's defects as regression
   tests, stats, progress, backup/import with a fixture shaped like the web export).
 - All UI and data code type-checked against the real Compose 1.7 / Material 3 1.3 APIs (desktop
   artifacts), with small stubs only for Android/Room/DataStore/Navigation types.
